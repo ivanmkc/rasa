@@ -9,6 +9,7 @@ import time
 import uuid
 from dateutil import parser
 from datetime import datetime
+from enum import Enum
 from typing import (
     List,
     Dict,
@@ -860,7 +861,7 @@ class BotUttered(SkipEventInMDStoryMixin):
     def __repr__(self) -> Text:
         """Returns text representation of event for debugging."""
         return "BotUttered('{}', {}, {}, {})".format(
-            self.text, json.dumps(self.data), json.dumps(self.metadata), self.timestamp
+            self.text, json.dumps(self.data), json.dumps(self.metadata), self.timestamp,
         )
 
     def apply_to(self, tracker: "DialogueStateTracker") -> None:
@@ -1270,7 +1271,7 @@ class ReminderCancelled(Event):
     def as_story_string(self) -> Text:
         """Returns text representation of event."""
         props = json.dumps(
-            {"name": self.name, "intent": self.intent, "entities": self.entities}
+            {"name": self.name, "intent": self.intent, "entities": self.entities,}
         )
         return f"{self.type_name}{props}"
 
@@ -1725,6 +1726,222 @@ class ActiveLoop(Event):
     def apply_to(self, tracker: "DialogueStateTracker") -> None:
         """Applies event to current conversation state."""
         tracker.change_loop_to(self.name)
+
+
+class StateMachineQueueActions(Event):
+    STATE_MACHINE_ACTION_QUEUE_NAME = "action_names"
+
+    type_name = "state_machine_queue_actions"
+
+    def __init__(
+        self,
+        action_probabilities: Optional[List[Tuple[str, float]]],
+        timestamp: Optional[float] = None,
+        metadata: Optional[Dict[Text, Any]] = None,
+    ) -> None:
+        """Creates event for setting action queue for the state machine state.
+
+        Args:
+            action_probabilities: Name of actions and probability
+            timestamp: When the event was created.
+            metadata: Additional event metadata.
+        """
+        self.action_probabilities = action_probabilities
+        super().__init__(timestamp, metadata)
+
+    def __str__(self) -> Text:
+        """Returns text representation of event."""
+        return f"StateMachineQueueActions({self.action_probabilities})"
+
+    def __hash__(self) -> int:
+        """Returns unique hash for event."""
+        return hash(self.action_probabilities)
+
+    def __eq__(self, other: Any) -> bool:
+        """Compares object with other object."""
+        if not isinstance(other, StateMachineQueueActions):
+            return NotImplemented
+
+        return self.action_probabilities == other.action_probabilities
+
+    def as_story_string(self) -> Text:
+        """Returns text representation of event."""
+        props = json.dumps(
+            {
+                StateMachineQueueActions.STATE_MACHINE_ACTION_QUEUE_NAME: self.action_probabilities
+            }
+        )
+        return f"{StateMachineQueueActions.type_name}{props}"
+
+    @classmethod
+    def _from_story_string(
+        cls, parameters: Dict[Text, Any]
+    ) -> List["StateMachineQueueActions"]:
+        """Called to convert a parsed story line into an event."""
+        return [
+            StateMachineQueueActions(
+                parameters.get(
+                    StateMachineQueueActions.STATE_MACHINE_ACTION_QUEUE_NAME
+                ),
+                parameters.get("timestamp"),
+                parameters.get("metadata"),
+            )
+        ]
+
+    def as_dict(self) -> Dict[Text, Any]:
+        """Returns serialized event."""
+        d = super().as_dict()
+        d.update(
+            {
+                StateMachineQueueActions.STATE_MACHINE_ACTION_QUEUE_NAME: self.action_probabilities
+            }
+        )
+        return d
+
+    def apply_to(self, tracker: "DialogueStateTracker") -> None:
+        """Applies event to current conversation state."""
+        tracker.queued_state_action_probabilities = self.action_probabilities
+
+
+class StateMachineTransition(Event):
+    type_name = "state_machine_transition"
+
+    def __init__(
+        self,
+        state_machine_state_name: Optional[str],
+        timestamp: Optional[float] = None,
+        metadata: Optional[Dict[Text, Any]] = None,
+    ) -> None:
+        """Creates event for transitioning state.
+
+        Args:
+            state_machine_state_name: The state machine state name
+            timestamp: When the event was created.
+            metadata: Additional event metadata.
+        """
+        self.state_machine_state_name = state_machine_state_name
+        super().__init__(timestamp, metadata)
+
+    def __str__(self) -> Text:
+        """Returns text representation of event."""
+        return f"StateMachineTransition({self.state_machine_state_name})"
+
+    def __hash__(self) -> int:
+        """Returns unique hash for event."""
+        return hash(self.state_machine_state_name)
+
+    def __eq__(self, other: Any) -> bool:
+        """Compares object with other object."""
+        if not isinstance(other, StateMachineTransition):
+            return NotImplemented
+
+        return self.state_machine_state_name == other.state_machine_state_name
+
+    def as_story_string(self) -> Text:
+        """Returns text representation of event."""
+        props = json.dumps(
+            {StateMachineTransition.type_name: self.state_machine_state_name}
+        )
+        return f"{StateMachineTransition.type_name}{props}"
+
+    @classmethod
+    def _from_story_string(
+        cls, parameters: Dict[Text, Any]
+    ) -> List["StateMachineTransition"]:
+        """Called to convert a parsed story line into an event."""
+        return [
+            StateMachineTransition(
+                parameters.get(StateMachineTransition.type_name),
+                parameters.get("timestamp"),
+                parameters.get("metadata"),
+            )
+        ]
+
+    def as_dict(self) -> Dict[Text, Any]:
+        """Returns serialized event."""
+        d = super().as_dict()
+        d.update({StateMachineTransition.type_name: self.state_machine_state_name})
+        return d
+
+    def apply_to(self, tracker: "DialogueStateTracker") -> None:
+        """Applies event to current conversation state."""
+        tracker.active_state_machine_state_name = self.state_machine_state_name
+        # Lifecycle is set to ENTRY when the state changes
+        tracker.state_machine_lifecycle = StateMachineLifecycle.ENTRY
+
+
+class StateMachineLifecycle(str, Enum):
+    ENTRY = "entry"
+    IN_STATE = "in_state"
+    EXIT = "exit"
+
+
+class StateMachineSetLifecycle(Event):
+    # """Set state machine lifecycle."""
+    STATE_MACHINE_LIFECYCLE = "lifecycle"
+
+    type_name = "state_machine_set_lifecycle"
+
+    def __init__(
+        self,
+        lifecycle: Optional[StateMachineLifecycle],
+        timestamp: Optional[float] = None,
+        metadata: Optional[Dict[Text, Any]] = None,
+    ) -> None:
+        """Creates event for setting state machine lifecycle.
+
+        Args:
+            lifecycle: State machine lifecycle
+            timestamp: When the event was created.
+            metadata: Additional event metadata.
+        """
+        self.lifecycle = lifecycle
+        super().__init__(timestamp, metadata)
+
+    def __str__(self) -> Text:
+        """Returns text representation of event."""
+        return f"StateMachineSetLifecycle({self.lifecycle})"
+
+    def __hash__(self) -> int:
+        """Returns unique hash for event."""
+        return hash(self.lifecycle)
+
+    def __eq__(self, other: Any) -> bool:
+        """Compares object with other object."""
+        if not isinstance(other, StateMachineSetLifecycle):
+            return NotImplemented
+
+        return self.lifecycle == other.lifecycle
+
+    def as_story_string(self) -> Text:
+        """Returns text representation of event."""
+        props = json.dumps(
+            {StateMachineSetLifecycle.STATE_MACHINE_LIFECYCLE: self.lifecycle}
+        )
+        return f"{StateMachineSetLifecycle.type_name}{props}"
+
+    @classmethod
+    def _from_story_string(
+        cls, parameters: Dict[Text, Any]
+    ) -> List["StateMachineSetLifecycle"]:
+        """Called to convert a parsed story line into an event."""
+        return [
+            StateMachineSetLifecycle(
+                parameters.get(StateMachineSetLifecycle.STATE_MACHINE_LIFECYCLE),
+                parameters.get("timestamp"),
+                parameters.get("metadata"),
+            )
+        ]
+
+    def as_dict(self) -> Dict[Text, Any]:
+        """Returns serialized event."""
+        d = super().as_dict()
+        d.update({StateMachineSetLifecycle.STATE_MACHINE_LIFECYCLE: self.lifecycle})
+        return d
+
+    def apply_to(self, tracker: "DialogueStateTracker") -> None:
+        """Applies event to current conversation state."""
+        tracker.state_machine_lifecycle = self.lifecycle
 
 
 class LegacyForm(ActiveLoop):

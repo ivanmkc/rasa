@@ -3,7 +3,7 @@
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
 - [How to open a GitHub issue & file a bug report](#how-to-open-a-github-issue--file-a-bug-report)
-  - [Working on a new feature or filing a bug report](#working-on-a-new-feature-or-filing-a-bug-report)
+  - [Working on a new feature or fixing a bug](#working-on-a-new-feature-or-fixing-a-bug)
   - [Working on an existing feature](#working-on-an-existing-feature)
 - [How to open a GitHub Pull Request](#how-to-open-a-github-pull-request)
   - [What is a Pull Request (PR)?](#what-is-a-pull-request-pr)
@@ -12,18 +12,18 @@
     - [Draft PRs](#draft-prs)
     - [PRs should be a reasonable length](#prs-should-be-a-reasonable-length)
     - [Code style](#code-style)
-    - [Formatting and Type Checking](#Formatting and Type Checking)
+    - [Formatting and Type Checking](#formatting-and-type-checking)
 - [How to open a PR and contribute code to Rasa Open Source](#how-to-open-a-pr-and-contribute-code-to-rasa-open-source)
-  - [1. Forking the Rasa Repository](#1-forking-the-rasa-repository)
-  - [2. Cloning the Forked Repository Locally](#2-cloning-the-forked-repository-locally)
-  - [3. Update your Forked Repository](#3-update-your-forked-repository)
-  - [4. Implement your code contribution](#4-implement-your-code-contribution)
-  - [5. Push changes to your forked repository on GitHub](#5-push-changes-to-your-forked-repository-on-github)
-  - [6. Opening the Pull Request on Rasa Open Source](#6-opening-the-pull-request-on-rasa-open-source)
-  - [7. Signing the Contributor Licence Agreement (CLA)](#7-signing-the-contributor-licence-agreement-cla)
-  - [8. Merging your PR and the final steps of your contribution](#8-merging-your-pr-and-the-final-steps-of-your-contribution)
-  - [9. Share your contributions with the world!](#9-share-your-contributions-with-the-world)
-  - [10. Non-code contributions](#10-non-code-contributions)
+    - [1. Forking the Rasa Repository](#1-forking-the-rasa-repository)
+    - [2. Cloning the Forked Repository Locally](#2-cloning-the-forked-repository-locally)
+    - [3. Update your Forked Repository](#3-update-your-forked-repository)
+    - [4. Implement your code contribution](#4-implement-your-code-contribution)
+    - [5. Push changes to your forked repository on GitHub](#5-push-changes-to-your-forked-repository-on-github)
+    - [6. Opening the Pull Request on Rasa Open Source](#6-opening-the-pull-request-on-rasa-open-source)
+    - [7. Signing the Contributor Licence Agreement (CLA)](#7-signing-the-contributor-licence-agreement-cla)
+    - [8. Merging your PR and the final steps of your contribution](#8-merging-your-pr-and-the-final-steps-of-your-contribution)
+    - [9. Share your contributions with the world!](#9-share-your-contributions-with-the-world)
+    - [10. Non-code contributions](#10-non-code-contributions)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 </div>

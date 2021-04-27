@@ -1,3 +1,4 @@
+import abc
 import copy
 import collections
 import json
@@ -32,8 +33,13 @@ from rasa.shared.constants import (
     IGNORED_INTENTS,
 )
 import rasa.shared.core.constants
-from rasa.shared.exceptions import RasaException, YamlException, YamlSyntaxException
+from rasa.shared.exceptions import (
+    RasaException,
+    YamlException,
+    YamlSyntaxException,
+)
 import rasa.shared.nlu.constants
+from rasa.shared.nlu.state_machine.state_machine_state import StateMachineState
 import rasa.shared.utils.validation
 import rasa.shared.utils.io
 import rasa.shared.utils.common
@@ -41,7 +47,6 @@ from rasa.shared.core.events import SlotSet, UserUttered
 from rasa.shared.core.slots import Slot, CategoricalSlot, TextSlot, AnySlot
 from rasa.shared.utils.validation import KEY_TRAINING_DATA_FORMAT_VERSION
 from rasa.shared.constants import RESPONSE_CONDITION
-
 
 if TYPE_CHECKING:
     from rasa.shared.core.trackers import DialogueStateTracker
@@ -62,6 +67,7 @@ KEY_ENTITIES = "entities"
 KEY_RESPONSES = "responses"
 KEY_ACTIONS = "actions"
 KEY_FORMS = "forms"
+KEY_STATE_MACHINE_STATES = "state_machine_states"
 KEY_E2E_ACTIONS = "e2e_actions"
 KEY_RESPONSES_TEXT = "text"
 
@@ -126,7 +132,17 @@ class SessionConfig(NamedTuple):
         return self.session_expiration_time > 0
 
 
-class Domain:
+class StateMachineProvider(abc.ABC):
+    @abc.abstractproperty
+    def initial_state_machine_state_name(self) -> Optional[str]:
+        pass
+
+    @abc.abstractmethod
+    def get_state_machine_state(self, state_name: str) -> Optional[StateMachineState]:
+        pass
+
+
+class Domain(StateMachineProvider):
     """The domain specifies the universe in which the bot's policy acts.
 
     A Domain subclass provides the actions the bot can take, the intents
@@ -206,6 +222,7 @@ class Domain:
         session_config = cls._get_session_config(data.get(SESSION_CONFIG_KEY, {}))
         intents = data.get(KEY_INTENTS, {})
         forms = data.get(KEY_FORMS, {})
+        state_machine_states = data.get(KEY_STATE_MACHINE_STATES, {})
 
         _validate_slot_mappings(forms)
 
@@ -217,6 +234,7 @@ class Domain:
             data.get(KEY_ACTIONS, []),
             data.get(KEY_FORMS, {}),
             data.get(KEY_E2E_ACTIONS, []),
+            state_machine_states,
             session_config=session_config,
             **additional_arguments,
         )
@@ -229,7 +247,8 @@ class Domain:
             session_expiration_time_min = DEFAULT_SESSION_EXPIRATION_TIME_IN_MINUTES
 
         carry_over_slots = session_config.get(
-            CARRY_OVER_SLOTS_KEY, DEFAULT_CARRY_OVER_SLOTS_TO_NEW_SESSION,
+            CARRY_OVER_SLOTS_KEY,
+            DEFAULT_CARRY_OVER_SLOTS_TO_NEW_SESSION,
         )
 
         return SessionConfig(session_expiration_time_min, carry_over_slots)
@@ -312,7 +331,12 @@ class Domain:
         for key in [KEY_ENTITIES, KEY_ACTIONS, KEY_E2E_ACTIONS]:
             combined[key] = merge_lists(combined[key], domain_dict[key])
 
-        for key in [KEY_FORMS, KEY_RESPONSES, KEY_SLOTS]:
+        for key in [
+            KEY_FORMS,
+            KEY_RESPONSES,
+            KEY_SLOTS,
+            KEY_STATE_MACHINE_STATES,
+        ]:
             combined[key] = merge_dicts(combined[key], domain_dict[key], override)
 
         return self.__class__.from_dict(combined)
@@ -572,6 +596,7 @@ class Domain:
         action_names: List[Text],
         forms: Union[Dict[Text, Any], List[Text]],
         action_texts: Optional[List[Text]] = None,
+        state_machine_states: Dict = {},
         store_entities_as_slots: bool = True,
         session_config: SessionConfig = SessionConfig.default(),
     ) -> None:
@@ -591,9 +616,11 @@ class Domain:
             session_config: Configuration for conversation sessions. Conversations are
                 restarted at the end of a session.
         """
-        self.entities, self.roles, self.groups = self.collect_entity_properties(
-            entities
-        )
+        (
+            self.entities,
+            self.roles,
+            self.groups,
+        ) = self.collect_entity_properties(entities)
         self.intent_properties = self.collect_intent_properties(
             intents, self.entities, self.roles, self.groups
         )
@@ -601,9 +628,11 @@ class Domain:
             intents
         )
 
-        self.form_names, self.forms, overridden_form_actions = self._initialize_forms(
-            forms
-        )
+        (
+            self.form_names,
+            self.forms,
+            overridden_form_actions,
+        ) = self._initialize_forms(forms)
         action_names += overridden_form_actions
 
         self.responses = responses
@@ -611,6 +640,9 @@ class Domain:
         _mark_conditional_response_variations_warning(self.responses)
 
         self.action_texts = action_texts or []
+
+        self.state_machine_states = state_machine_states
+
         self.session_config = session_config
 
         self._custom_actions = action_names
@@ -707,6 +739,26 @@ class Domain:
     def __hash__(self) -> int:
         """Returns a unique hash for the domain."""
         return int(self.fingerprint(), 16)
+
+    @property
+    def initial_state_machine_state_name(self) -> Optional[str]:
+        # Attempt to load initial state
+        for state_name, state in self.state_machine_states.items():
+            if state.get("is_initial_state"):
+                return state_name
+
+        return None
+
+    def get_state_machine_state(self, state_name: str) -> Optional[StateMachineState]:
+        state_machine_state = self.state_machine_states.get(state_name)
+
+        if state_machine_state:
+            import yaml
+
+            state_yaml = state_machine_state.get("state_yaml")
+            return yaml.load(state_yaml, yaml.Loader)
+        else:
+            return None
 
     def fingerprint(self) -> Text:
         """Returns a unique hash for the domain which is stable across python runs.
@@ -824,7 +876,9 @@ class Domain:
 
     def _add_session_metadata_slot(self) -> None:
         self.slots.append(
-            AnySlot(rasa.shared.core.constants.SESSION_START_METADATA_SLOT,)
+            AnySlot(
+                rasa.shared.core.constants.SESSION_START_METADATA_SLOT,
+            )
         )
 
     def index_for_action(self, action_name: Text) -> int:
@@ -1009,7 +1063,8 @@ class Domain:
 
     @staticmethod
     def _get_slots_sub_state(
-        tracker: "DialogueStateTracker", omit_unset_slots: bool = False,
+        tracker: "DialogueStateTracker",
+        omit_unset_slots: bool = False,
     ) -> Dict[Text, Union[Text, Tuple[float]]]:
         """Sets all set slots with the featurization of the stored value.
 
@@ -1076,7 +1131,9 @@ class Domain:
         }
 
     def get_active_state(
-        self, tracker: "DialogueStateTracker", omit_unset_slots: bool = False,
+        self,
+        tracker: "DialogueStateTracker",
+        omit_unset_slots: bool = False,
     ) -> State:
         """Given a dialogue tracker, makes a representation of current dialogue state.
 
@@ -1103,7 +1160,8 @@ class Domain:
 
     @staticmethod
     def _remove_rule_only_features(
-        state: State, rule_only_data: Optional[Dict[Text, Any]],
+        state: State,
+        rule_only_data: Optional[Dict[Text, Any]],
     ) -> None:
         if not rule_only_data:
             return
@@ -1289,6 +1347,7 @@ class Domain:
             KEY_RESPONSES: self.responses,
             KEY_ACTIONS: self._custom_actions,
             KEY_FORMS: self.forms,
+            KEY_STATE_MACHINE_STATES: self.state_machine_states,
             KEY_E2E_ACTIONS: self.action_texts,
         }
 
@@ -1321,7 +1380,7 @@ class Domain:
 
     def _transform_intents_for_file(
         self,
-    ) -> List[Dict[Text, Dict[Text, Union[bool, List[Text]]]]]:
+    ) -> List[Union[Text, Dict[Text, Any]]]:
         """Transform intent properties for displaying or writing into a domain file.
 
         Internally, there is a property `used_entities` that lists all entities to be
@@ -1361,7 +1420,9 @@ class Domain:
 
         return intents_for_file
 
-    def _transform_entities_for_file(self) -> List[Union[Text, Dict[Text, Any]]]:
+    def _transform_entities_for_file(
+        self,
+    ) -> List[Union[Text, Dict[Text, Any]]]:
         """Transform entity properties for displaying or writing to a domain file.
 
         Returns:
@@ -1524,7 +1585,10 @@ class Domain:
         in_domain_diff = set(domain_elements) - set(training_data_elements)
         in_training_data_diff = set(training_data_elements) - set(domain_elements)
 
-        return {"in_domain": in_domain_diff, "in_training_data": in_training_data_diff}
+        return {
+            "in_domain": in_domain_diff,
+            "in_training_data": in_training_data_diff,
+        }
 
     @staticmethod
     def _combine_with_responses(
@@ -1537,7 +1601,9 @@ class Domain:
         return actions + unique_utter_actions
 
     @staticmethod
-    def _combine_user_with_default_actions(user_actions: List[Text]) -> List[Text]:
+    def _combine_user_with_default_actions(
+        user_actions: List[Text],
+    ) -> List[Text]:
         # remove all user actions that overwrite default actions
         # this logic is a bit reversed, you'd think that we should remove
         # the action name from the default action names if the user overwrites

@@ -39,7 +39,13 @@ mapping:
   responses:
     # see utils/schemas/responses.yml
     include: responses
-
+  state_machine:
+    type: "map"
+    mapping:
+      is_initial_state:
+        type: "bool"
+      state_yaml:
+        type: "str"
   slots:
     type: "map"
     allowempty: True

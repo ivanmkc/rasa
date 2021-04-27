@@ -13,3 +13,4 @@ from rasa.core.policies.rule_policy import RulePolicy  # noqa: F401
 from rasa.core.policies.unexpected_intent_policy import (  # noqa: F401
     UnexpecTEDIntentPolicy,
 )
+from rasa.core.policies.state_machine_policy import StateMachinePolicy  # noqa: F401

@@ -47,6 +47,7 @@ from rasa.shared.core.constants import (
 )
 from rasa.shared.core.conversation import Dialogue
 from rasa.shared.core.events import (
+    StateMachineTransition,
     UserUttered,
     ActionExecuted,
     Event,
@@ -220,6 +221,11 @@ class DialogueStateTracker:
         self.latest_bot_utterance = None
         self._reset()
         self.active_loop: "TrackerActiveLoop" = {}
+        self.queued_state_action_probabilities = None
+        self.state_machine_lifecycle = None  # Lifecycle within a state of the state machine (ENTRY, IN_STATE, EXIT)
+
+        # Set the initial state
+        self.active_state_machine_state_name = None
 
     ###
     # Public tracker interface
@@ -290,6 +296,12 @@ class DialogueStateTracker:
                 for key, values in state.items()
             }.items()
         )
+
+    def get_active_state_machine_state(self, domain) -> Optional["StateMachineState"]:
+        if self.active_state_machine_state_name:
+            return domain.get_state_machine_state(self.active_state_machine_state_name)
+        else:
+            return None
 
     def past_states(
         self,
@@ -430,6 +442,22 @@ class DialogueStateTracker:
 
         return 0
 
+    @property
+    def last_transitioned_state_name(self) -> Optional[str]:
+        """Get the name of the last state that was transitioned to"""
+
+        state_machine_transitions = [
+            event
+            for event in reversed(self.events)
+            if isinstance(event, StateMachineTransition)
+        ]
+
+        # Skip most recent transition since it's the same state
+        if len(state_machine_transitions) > 1:
+            return state_machine_transitions[1].state_machine_state_name
+
+        return None
+
     def events_after_latest_restart(self) -> List[Event]:
         """Return a list of events after the most recent restart."""
         return list(self.events)[self.idx_after_latest_restart() :]
@@ -547,7 +575,7 @@ class DialogueStateTracker:
 
     @staticmethod
     def _is_within_unhappy_path(
-        loop_action_name: Text, event: Event, next_action_in_the_future: Optional[Text]
+        loop_action_name: Text, event: Event, next_action_in_the_future: Optional[Text],
     ) -> bool:
         # When actual users are talking to the action has to return an
         # `ActionExecutionRejected` in order to enter an unhappy path.
@@ -576,7 +604,7 @@ class DialogueStateTracker:
                 break
 
             if isinstance(
-                e, (ActionExecuted, UserUttered, DefinePrevUserUtteredFeaturization),
+                e, (ActionExecuted, UserUttered, DefinePrevUserUtteredFeaturization,),
             ):
                 del done_events[-1 - offset]
             else:
@@ -637,7 +665,7 @@ class DialogueStateTracker:
         return Dialogue(self.sender_id, list(self.events))
 
     def update(self, event: Event, domain: Optional[Domain] = None) -> None:
-        """Modify the state of the tracker according to an ``Event``. """
+        """Modify the state of the tracker according to an ``Event``."""
         if not isinstance(event, Event):  # pragma: no cover
             raise ValueError("event to log must be an instance of a subclass of Event.")
 
@@ -710,7 +738,7 @@ class DialogueStateTracker:
         story = self.as_story(include_source)
 
         return writer.dumps(
-            story.story_steps, is_appendable=should_append_stories, is_test_story=e2e
+            story.story_steps, is_appendable=should_append_stories, is_test_story=e2e,
         )
 
     def export_stories_to_file(self, export_path: Text = "debug_stories.yml") -> None:
@@ -756,7 +784,8 @@ class DialogueStateTracker:
             return has_instance and not excluded
 
         filtered = filter(
-            filter_function, reversed(self._events_for_verbosity(event_verbosity) or [])
+            filter_function,
+            reversed(self._events_for_verbosity(event_verbosity) or []),
         )
 
         for i in range(skip):
@@ -776,7 +805,7 @@ class DialogueStateTracker:
         """
 
         last: Optional[ActionExecuted] = self.get_last_event_for(
-            ActionExecuted, action_names_to_exclude=[ACTION_LISTEN_NAME], skip=skip
+            ActionExecuted, action_names_to_exclude=[ACTION_LISTEN_NAME], skip=skip,
         )
         return last is not None and last.action_name == name
 
