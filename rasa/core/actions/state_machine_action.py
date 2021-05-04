@@ -538,24 +538,27 @@ class StateMachineAction(LoopAction):
             Events from the activation.
         """
 
-        logger.debug(f"Activated the form '{self.name()}'.")
-        # collect values of required slots filled before activation
-        prefilled_slots = {}
+        # Perhaps handle OnEntryCondition's here
+        return []
 
-        for slot_name in self.required_slots(domain):
-            if not self._should_request_slot(tracker, slot_name):
-                prefilled_slots[slot_name] = tracker.get_slot(slot_name)
+        # logger.debug(f"Activated the form '{self.name()}'.")
+        # # collect values of required slots filled before activation
+        # prefilled_slots = {}
 
-        if not prefilled_slots:
-            logger.debug("No pre-filled required slots to validate.")
-            return []
+        # for slot_name in self.required_slots(domain):
+        #     if not self._should_request_slot(tracker, slot_name):
+        #         prefilled_slots[slot_name] = tracker.get_slot(slot_name)
 
-        logger.debug(
-            f"Validating pre-filled required slots: {prefilled_slots}"
-        )
-        return await self.validate_slots(
-            prefilled_slots, tracker, domain, output_channel, nlg
-        )
+        # if not prefilled_slots:
+        #     logger.debug("No pre-filled required slots to validate.")
+        #     return []
+
+        # logger.debug(
+        #     f"Validating pre-filled required slots: {prefilled_slots}"
+        # )
+        # return await self.validate_slots(
+        #     prefilled_slots, tracker, domain, output_channel, nlg
+        # )
 
     async def do(
         self,

@@ -35,15 +35,25 @@ class Intent(YAMLConvertable):
 
 
 class Action(abc.ABC):
-    @property
+    @abc.abstractproperty
     def name(self) -> str:
         pass
 
 
-class Utterance(Action):
+# class ResetSlotsAction(Action):
 
-    _name: str
-    text: str
+#     name: str = "ResetSlotsAction"
+#     slots: List[Slot]
+
+#     def __init__(self, slots: List[Slot], name: str):
+#         self.slots = slots
+#         self.name = name
+
+
+class Utterance(Action):
+    @property
+    def name(self) -> str:
+        return self._name
 
     def __init__(self, text: str, name: Optional[str] = None):
         self.text = text
@@ -55,10 +65,6 @@ class Utterance(Action):
                 e.lower() for e in text if e.isalnum() or e.isspace()
             )
             self._name = "utter_" + "_".join(text_stripped.split(" "))
-
-    @property
-    def name(self) -> str:
-        return self._name
 
 
 # class Entity(abc.ABC):
@@ -85,73 +91,33 @@ class Utterance(Action):
 # }
 
 
-class Slot:
-    @abc.abstractproperty
-    def name() -> str:
-        pass
-
-    @abc.abstractproperty
-    def condition() -> Optional[Condition]:
-        pass
-
-    @abc.abstractproperty
-    def entities() -> List[str]:
-        pass
-
-    @abc.abstractproperty
-    def intents() -> Dict[Union[Intent, str], Any]:
-        pass
-
-    @abc.abstractproperty
-    def prompt_actions() -> List[Action]:
-        pass
-
-    @abc.abstractproperty
-    def only_fill_when_prompted() -> bool:
-        pass
+class Slot(abc.ABC):
+    def __init__(
+        self,
+        name: str,
+        condition: Optional[Condition] = None,
+        only_fill_when_prompted: bool = False,
+        entities: List[str] = [],
+        intents: Dict[Intent, Any] = {},
+        prompt_actions: List[Action] = [],
+    ):
+        self.name = name
+        self.condition = condition
+        self.entities = entities
+        self.intents = intents
+        self.only_fill_when_prompted = only_fill_when_prompted
+        self.prompt_actions = prompt_actions
 
     @abc.abstractmethod
     def as_rasa_slot(self) -> rasa_slots.Slot:
         pass
 
 
-class TextSlot(abc.ABC):
-    def __init__(
-        self,
-        name: str,
-        condition: Optional[Condition] = None,
-        only_fill_when_prompted: bool = False,
-        entities: List[str] = [],
-        intents: Dict[Intent, Any] = {},
-        prompt_actions: List[Action] = [],
-    ):
-        self.name = name
-        self.condition = condition
-        self.entities = entities
-        self.intents = intents
-        self.only_fill_when_prompted = only_fill_when_prompted
-        self.prompt_actions = prompt_actions
-
+class TextSlot(Slot):
     def as_rasa_slot(self) -> rasa_slots.Slot:
         return rasa_slots.TextSlot(name=self.name)
 
 
-class BooleanSlot(abc.ABC):
-    def __init__(
-        self,
-        name: str,
-        condition: Optional[Condition] = None,
-        only_fill_when_prompted: bool = False,
-        entities: List[str] = [],
-        intents: Dict[Intent, Any] = {},
-        prompt_actions: List[Action] = [],
-    ):
-        self.name = name
-        self.condition = condition
-        self.only_fill_when_prompted = only_fill_when_prompted
-        self.entities = entities
-        self.intents = intents
-        self.prompt_actions = prompt_actions
-
+class BooleanSlot(Slot):
     def as_rasa_slot(self) -> rasa_slots.Slot:
         return rasa_slots.BooleanSlot(name=self.name)
