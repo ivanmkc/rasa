@@ -67,7 +67,9 @@ if TYPE_CHECKING:
     from typing_extensions import TypedDict
 
     from rasa.shared.core.training_data.structures import Story
-    from rasa.shared.core.training_data.story_writer.story_writer import StoryWriter
+    from rasa.shared.core.training_data.story_writer.story_writer import (
+        StoryWriter,
+    )
 
     # precise type definition for `DialogueStateTracker.active_loop`
     TrackerActiveLoop = TypedDict(
@@ -85,7 +87,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # same as State but with Dict[...] substituted with FrozenSet[Tuple[...]]
-FrozenState = FrozenSet[Tuple[Text, FrozenSet[Tuple[Text, Tuple[Union[float, Text]]]]]]
+FrozenState = FrozenSet[
+    Tuple[Text, FrozenSet[Tuple[Text, Tuple[Union[float, Text]]]]]
+]
 
 
 class EventVerbosity(Enum):
@@ -219,10 +223,16 @@ class DialogueStateTracker:
         self.latest_bot_utterance = None
         self._reset()
         self.active_loop: "TrackerActiveLoop" = {}
+        self.queued_state_actions = None
+        self.state_machine_lifecycle = None
 
     ###
     # Public tracker interface
     ###
+    @property
+    def has_entered_state(self) -> bool:
+        return self.queued_state_actions is not None
+
     def current_state(
         self, event_verbosity: EventVerbosity = EventVerbosity.NONE
     ) -> Dict[Text, Any]:
@@ -520,7 +530,9 @@ class DialogueStateTracker:
         return applied_events
 
     @staticmethod
-    def _undo_till_previous(event_type: Type[Event], done_events: List[Event]) -> None:
+    def _undo_till_previous(
+        event_type: Type[Event], done_events: List[Event]
+    ) -> None:
         """Removes events from `done_events`.
 
         Removes events from `done_events` until the first occurrence `event_type`
@@ -544,7 +556,9 @@ class DialogueStateTracker:
             if isinstance(event, ActiveLoop) and event.name is None:
                 return True
 
-            if self._is_within_unhappy_path(loop_action_name, event, next_action):
+            if self._is_within_unhappy_path(
+                loop_action_name, event, next_action
+            ):
                 return True
 
             if isinstance(event, ActionExecuted):
@@ -561,7 +575,9 @@ class DialogueStateTracker:
 
     @staticmethod
     def _is_within_unhappy_path(
-        loop_action_name: Text, event: Event, next_action_in_the_future: Optional[Text]
+        loop_action_name: Text,
+        event: Event,
+        next_action_in_the_future: Optional[Text],
     ) -> bool:
         # When actual users are talking to the action has to return an
         # `ActionExecutionRejected` in order to enter an unhappy path.
@@ -578,7 +594,10 @@ class DialogueStateTracker:
             and next_action_in_the_future != loop_action_name
         )
 
-        return loop_was_rejected_previously or other_action_after_latest_user_utterance
+        return (
+            loop_was_rejected_previously
+            or other_action_after_latest_user_utterance
+        )
 
     @staticmethod
     def _undo_till_previous_loop_execution(
@@ -586,11 +605,19 @@ class DialogueStateTracker:
     ) -> None:
         offset = 0
         for e in reversed(done_events[:]):
-            if isinstance(e, ActionExecuted) and e.action_name == loop_action_name:
+            if (
+                isinstance(e, ActionExecuted)
+                and e.action_name == loop_action_name
+            ):
                 break
 
             if isinstance(
-                e, (ActionExecuted, UserUttered, DefinePrevUserUtteredFeaturization),
+                e,
+                (
+                    ActionExecuted,
+                    UserUttered,
+                    DefinePrevUserUtteredFeaturization,
+                ),
             ):
                 del done_events[-1 - offset]
             else:
@@ -625,7 +652,9 @@ class DialogueStateTracker:
         """Creates a duplicate of this tracker"""
         return self.travel_back_in_time(float("inf"))
 
-    def travel_back_in_time(self, target_time: float) -> "DialogueStateTracker":
+    def travel_back_in_time(
+        self, target_time: float
+    ) -> "DialogueStateTracker":
         """Creates a new tracker with a state at a specific timestamp.
 
         A new tracker will be created and all events previous to the
@@ -651,9 +680,11 @@ class DialogueStateTracker:
         return Dialogue(self.sender_id, list(self.events))
 
     def update(self, event: Event, domain: Optional[Domain] = None) -> None:
-        """Modify the state of the tracker according to an ``Event``. """
+        """Modify the state of the tracker according to an ``Event``."""
         if not isinstance(event, Event):  # pragma: no cover
-            raise ValueError("event to log must be an instance of a subclass of Event.")
+            raise ValueError(
+                "event to log must be an instance of a subclass of Event."
+            )
 
         self.events.append(event)
         event.apply_to(self)
@@ -724,10 +755,14 @@ class DialogueStateTracker:
         story = self.as_story(include_source)
 
         return writer.dumps(
-            story.story_steps, is_appendable=should_append_stories, is_test_story=e2e
+            story.story_steps,
+            is_appendable=should_append_stories,
+            is_test_story=e2e,
         )
 
-    def export_stories_to_file(self, export_path: Text = "debug_stories.yml") -> None:
+    def export_stories_to_file(
+        self, export_path: Text = "debug_stories.yml"
+    ) -> None:
         """Dump the tracker as a story to a file."""
         from rasa.shared.core.training_data.story_writer.yaml_story_writer import (
             YAMLStoryWriter,
@@ -736,7 +771,10 @@ class DialogueStateTracker:
         append = os.path.exists(export_path)
 
         rasa.shared.utils.io.write_text_file(
-            self.export_stories(YAMLStoryWriter(), should_append_stories=append) + "\n",
+            self.export_stories(
+                YAMLStoryWriter(), should_append_stories=append
+            )
+            + "\n",
             export_path,
             append=append,
         )
@@ -766,11 +804,14 @@ class DialogueStateTracker:
 
         def filter_function(e: Event) -> bool:
             has_instance = isinstance(e, event_type)
-            excluded = isinstance(e, ActionExecuted) and e.action_name in to_exclude
+            excluded = (
+                isinstance(e, ActionExecuted) and e.action_name in to_exclude
+            )
             return has_instance and not excluded
 
         filtered = filter(
-            filter_function, reversed(self._events_for_verbosity(event_verbosity) or [])
+            filter_function,
+            reversed(self._events_for_verbosity(event_verbosity) or []),
         )
 
         for i in range(skip):
@@ -790,7 +831,9 @@ class DialogueStateTracker:
         """
 
         last: Optional[ActionExecuted] = self.get_last_event_for(
-            ActionExecuted, action_names_to_exclude=[ACTION_LISTEN_NAME], skip=skip
+            ActionExecuted,
+            action_names_to_exclude=[ACTION_LISTEN_NAME],
+            skip=skip,
         )
         return last is not None and last.action_name == name
 
@@ -835,7 +878,10 @@ class DialogueStateTracker:
 
     def __eq__(self, other: Any) -> bool:
         if isinstance(self, type(other)):
-            return other.events == self.events and self.sender_id == other.sender_id
+            return (
+                other.events == self.events
+                and self.sender_id == other.sender_id
+            )
         else:
             return False
 
@@ -858,7 +904,10 @@ class DialogueStateTracker:
 
         Returns: `None` if no active loop or the name of the currently active loop.
         """
-        if not self.active_loop or self.active_loop.get(LOOP_NAME) == SHOULD_NOT_BE_SET:
+        if (
+            not self.active_loop
+            or self.active_loop.get(LOOP_NAME) == SHOULD_NOT_BE_SET
+        ):
             return None
 
         return self.active_loop.get(LOOP_NAME)

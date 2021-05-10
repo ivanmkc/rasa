@@ -173,7 +173,9 @@ class Domain:
     def from_yaml(cls, yaml: Text, original_filename: Text = "") -> "Domain":
         """Loads the `Domain` from YAML text after validating it."""
         try:
-            rasa.shared.utils.validation.validate_yaml_schema(yaml, DOMAIN_SCHEMA_FILE)
+            rasa.shared.utils.validation.validate_yaml_schema(
+                yaml, DOMAIN_SCHEMA_FILE
+            )
 
             data = rasa.shared.utils.io.read_yaml(yaml)
             if not rasa.shared.utils.validation.validate_training_data_format_version(
@@ -227,10 +229,13 @@ class Domain:
         )
 
         if session_expiration_time_min is None:
-            session_expiration_time_min = DEFAULT_SESSION_EXPIRATION_TIME_IN_MINUTES
+            session_expiration_time_min = (
+                DEFAULT_SESSION_EXPIRATION_TIME_IN_MINUTES
+            )
 
         carry_over_slots = session_config.get(
-            CARRY_OVER_SLOTS_KEY, DEFAULT_CARRY_OVER_SLOTS_TO_NEW_SESSION,
+            CARRY_OVER_SLOTS_KEY,
+            DEFAULT_CARRY_OVER_SLOTS_TO_NEW_SESSION,
         )
 
         return SessionConfig(session_expiration_time_min, carry_over_slots)
@@ -680,6 +685,13 @@ class Domain:
         domain_dict = self.as_dict()
         return self.__class__.from_dict(copy.deepcopy(domain_dict, memo))
 
+    @property
+    def state_machine_action_names(self) -> List[str]:
+        if not self.active_state_machine_state:
+            return []
+
+        return [action.name() for action in self.active_state_machine_state.all_actions()]
+
     @staticmethod
     def _collect_overridden_default_intents(
         intents: Union[Set[Text], List[Text], List[Dict[Text, Any]]]
@@ -722,7 +734,10 @@ class Domain:
         """
         if isinstance(forms, dict):
             for form_name, form_data in forms.items():
-                if form_data is not None and REQUIRED_SLOTS_KEY not in form_data:
+                if (
+                    form_data is not None
+                    and REQUIRED_SLOTS_KEY not in form_data
+                ):
                     forms[form_name] = {REQUIRED_SLOTS_KEY: form_data}
             # dict with slot mappings
             return list(forms.keys()), forms, []
@@ -2046,7 +2061,10 @@ def _validate_slot_mappings(forms: Union[Dict, List]) -> None:
                 f"for more information."
             )
 
-        if IGNORED_INTENTS in form_data and REQUIRED_SLOTS_KEY not in form_data:
+        if (
+            IGNORED_INTENTS in form_data
+            and REQUIRED_SLOTS_KEY not in form_data
+        ):
             raise InvalidDomain(
                 f"If you use the `{IGNORED_INTENTS}` parameter in your form, then "
                 f"the keyword `{REQUIRED_SLOTS_KEY}` should precede the definition "

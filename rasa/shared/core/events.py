@@ -9,6 +9,7 @@ import time
 import uuid
 from dateutil import parser
 from datetime import datetime
+from enum import Enum
 from typing import (
     List,
     Dict,
@@ -57,7 +58,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def deserialise_events(serialized_events: List[Dict[Text, Any]]) -> List["Event"]:
+def deserialise_events(
+    serialized_events: List[Dict[Text, Any]]
+) -> List["Event"]:
     """Convert a list of dictionaries to a list of corresponding events.
 
     Example format:
@@ -80,7 +83,9 @@ def deserialise_events(serialized_events: List[Dict[Text, Any]]) -> List["Event"
     return deserialised
 
 
-def deserialise_entities(entities: Union[Text, List[Any]]) -> List[Dict[Text, Any]]:
+def deserialise_entities(
+    entities: Union[Text, List[Any]]
+) -> List[Dict[Text, Any]]:
     if isinstance(entities, str):
         entities = json.loads(entities)
 
@@ -101,7 +106,9 @@ def format_message(
         Message with entities annotated inline, e.g.
         `I am from [Berlin]{"entity": "city"}`.
     """
-    from rasa.shared.nlu.training_data.formats.readerwriter import TrainingDataWriter
+    from rasa.shared.nlu.training_data.formats.readerwriter import (
+        TrainingDataWriter,
+    )
     from rasa.shared.nlu.training_data import entities_parser
 
     message_from_md = entities_parser.parse_training_example(text, intent)
@@ -260,14 +267,18 @@ class Event(ABC):
         if event_name is None:
             return None
 
-        event_class: Optional[Type[Event]] = Event.resolve_by_type(event_name, default)
+        event_class: Optional[Type[Event]] = Event.resolve_by_type(
+            event_name, default
+        )
         if not event_class:
             return None
 
         return event_class._from_parameters(parameters)
 
     @classmethod
-    def _from_story_string(cls, parameters: Dict[Text, Any]) -> Optional[List["Event"]]:
+    def _from_story_string(
+        cls, parameters: Dict[Text, Any]
+    ) -> Optional[List["Event"]]:
         """Called to convert a parsed story line into an event."""
         return [cls(parameters.get("timestamp"), parameters.get("metadata"))]
 
@@ -280,7 +291,9 @@ class Event(ABC):
         return d
 
     @classmethod
-    def _from_parameters(cls, parameters: Dict[Text, Any]) -> Optional["Event"]:
+    def _from_parameters(
+        cls, parameters: Dict[Text, Any]
+    ) -> Optional["Event"]:
         """Called to convert a dictionary of parameters to a single event.
 
         By default uses the same implementation as the story line
@@ -506,7 +519,9 @@ class UserUttered(Event):
         )
         return _dict
 
-    def as_sub_state(self) -> Dict[Text, Union[None, Text, List[Optional[Text]]]]:
+    def as_sub_state(
+        self,
+    ) -> Dict[Text, Union[None, Text, List[Optional[Text]]]]:
         """Turns a UserUttered event into features.
 
         The substate contains information about entities, intent and text of the
@@ -515,7 +530,9 @@ class UserUttered(Event):
         Returns:
             a dictionary with intent name, text and entities
         """
-        entities = [entity.get(ENTITY_ATTRIBUTE_TYPE) for entity in self.entities]
+        entities = [
+            entity.get(ENTITY_ATTRIBUTE_TYPE) for entity in self.entities
+        ]
         entities.extend(
             (
                 f"{entity.get(ENTITY_ATTRIBUTE_TYPE)}{ENTITY_LABEL_SEPARATOR}"
@@ -537,7 +554,8 @@ class UserUttered(Event):
         # During training we expect either intent_name or text to be set.
         # During prediction both will be set.
         if self.text and (
-            self.use_text_for_featurization or self.use_text_for_featurization is None
+            self.use_text_for_featurization
+            or self.use_text_for_featurization is None
         ):
             out[TEXT] = self.text
         if self.intent_name and not self.use_text_for_featurization:
@@ -549,7 +567,9 @@ class UserUttered(Event):
         return out
 
     @classmethod
-    def _from_story_string(cls, parameters: Dict[Text, Any]) -> Optional[List[Event]]:
+    def _from_story_string(
+        cls, parameters: Dict[Text, Any]
+    ) -> Optional[List[Event]]:
         try:
             return [
                 cls._from_parse_data(
@@ -568,7 +588,9 @@ class UserUttered(Event):
         if self.entities:
             return json.dumps(
                 {
-                    entity[ENTITY_ATTRIBUTE_TYPE]: entity[ENTITY_ATTRIBUTE_VALUE]
+                    entity[ENTITY_ATTRIBUTE_TYPE]: entity[
+                        ENTITY_ATTRIBUTE_VALUE
+                    ]
                     for entity in self.entities
                 },
                 ensure_ascii=False,
@@ -689,7 +711,9 @@ class DefinePrevUserUtteredFeaturization(SkipEventInMDStoryMixin):
         if not isinstance(other, DefinePrevUserUtteredFeaturization):
             return NotImplemented
 
-        return self.use_text_for_featurization == other.use_text_for_featurization
+        return (
+            self.use_text_for_featurization == other.use_text_for_featurization
+        )
 
 
 class EntitiesAdded(SkipEventInMDStoryMixin):
@@ -795,7 +819,9 @@ class BotUttered(SkipEventInMDStoryMixin):
 
     def __members(self) -> Tuple[Optional[Text], Text, Text]:
         data_no_nones = {k: v for k, v in self.data.items() if v is not None}
-        meta_no_nones = {k: v for k, v in self.metadata.items() if v is not None}
+        meta_no_nones = {
+            k: v for k, v in self.metadata.items() if v is not None
+        }
         return (
             self.text,
             jsonpickle.encode(data_no_nones),
@@ -822,7 +848,10 @@ class BotUttered(SkipEventInMDStoryMixin):
     def __repr__(self) -> Text:
         """Returns text representation of event for debugging."""
         return "BotUttered('{}', {}, {}, {})".format(
-            self.text, json.dumps(self.data), json.dumps(self.metadata), self.timestamp
+            self.text,
+            json.dumps(self.data),
+            json.dumps(self.metadata),
+            self.timestamp,
         )
 
     def apply_to(self, tracker: "DialogueStateTracker") -> None:
@@ -853,7 +882,9 @@ class BotUttered(SkipEventInMDStoryMixin):
     def as_dict(self) -> Dict[Text, Any]:
         """Returns serialized event."""
         d = super().as_dict()
-        d.update({"text": self.text, "data": self.data, "metadata": self.metadata})
+        d.update(
+            {"text": self.text, "data": self.data, "metadata": self.metadata}
+        )
         return d
 
     @classmethod
@@ -921,7 +952,9 @@ class SlotSet(Event):
         return f"{self.type_name}{props}"
 
     @classmethod
-    def _from_story_string(cls, parameters: Dict[Text, Any]) -> Optional[List[Event]]:
+    def _from_story_string(
+        cls, parameters: Dict[Text, Any]
+    ) -> Optional[List[Event]]:
 
         slots = []
         for slot_key, slot_val in parameters.items():
@@ -1120,7 +1153,9 @@ class ReminderScheduled(Event):
         return d
 
     @classmethod
-    def _from_story_string(cls, parameters: Dict[Text, Any]) -> Optional[List[Event]]:
+    def _from_story_string(
+        cls, parameters: Dict[Text, Any]
+    ) -> Optional[List[Event]]:
 
         trigger_date_time = parser.parse(parameters.get("date_time"))
 
@@ -1214,7 +1249,10 @@ class ReminderCancelled(Event):
         return (
             ((not self.name) or self._matches_name_hash(name_hash))
             and ((not self.intent) or self._matches_intent_hash(intent_hash))
-            and ((not self.entities) or self._matches_entities_hash(entities_hash))
+            and (
+                (not self.entities)
+                or self._matches_entities_hash(entities_hash)
+            )
         )
 
     def _matches_name_hash(self, name_hash: Text) -> bool:
@@ -1229,12 +1267,18 @@ class ReminderCancelled(Event):
     def as_story_string(self) -> Text:
         """Returns text representation of event."""
         props = json.dumps(
-            {"name": self.name, "intent": self.intent, "entities": self.entities}
+            {
+                "name": self.name,
+                "intent": self.intent,
+                "entities": self.entities,
+            }
         )
         return f"{self.type_name}{props}"
 
     @classmethod
-    def _from_story_string(cls, parameters: Dict[Text, Any]) -> Optional[List[Event]]:
+    def _from_story_string(
+        cls, parameters: Dict[Text, Any]
+    ) -> Optional[List[Event]]:
         return [
             ReminderCancelled(
                 parameters.get("name"),
@@ -1298,7 +1342,9 @@ class StoryExported(Event):
         return hash(32143124319)
 
     @classmethod
-    def _from_story_string(cls, parameters: Dict[Text, Any]) -> Optional[List[Event]]:
+    def _from_story_string(
+        cls, parameters: Dict[Text, Any]
+    ) -> Optional[List[Event]]:
         return [
             StoryExported(
                 parameters.get("path"),
@@ -1366,7 +1412,9 @@ class FollowupAction(Event):
         return f"{self.type_name}{props}"
 
     @classmethod
-    def _from_story_string(cls, parameters: Dict[Text, Any]) -> Optional[List[Event]]:
+    def _from_story_string(
+        cls, parameters: Dict[Text, Any]
+    ) -> Optional[List[Event]]:
 
         return [
             FollowupAction(
@@ -1510,7 +1558,9 @@ class ActionExecuted(Event):
         return self.action_name
 
     @classmethod
-    def _from_story_string(cls, parameters: Dict[Text, Any]) -> Optional[List[Event]]:
+    def _from_story_string(
+        cls, parameters: Dict[Text, Any]
+    ) -> Optional[List[Event]]:
         return [
             ActionExecuted(
                 parameters.get("name"),
@@ -1661,7 +1711,9 @@ class ActiveLoop(Event):
         return f"{ActiveLoop.type_name}{props}"
 
     @classmethod
-    def _from_story_string(cls, parameters: Dict[Text, Any]) -> List["ActiveLoop"]:
+    def _from_story_string(
+        cls, parameters: Dict[Text, Any]
+    ) -> List["ActiveLoop"]:
         """Called to convert a parsed story line into an event."""
         return [
             ActiveLoop(
@@ -1680,6 +1732,159 @@ class ActiveLoop(Event):
     def apply_to(self, tracker: "DialogueStateTracker") -> None:
         """Applies event to current conversation state."""
         tracker.change_loop_to(self.name)
+
+
+class StateMachineQueueActions(Event):
+    STATE_MACHINE_ACTION_QUEUE_NAME = "action_names"
+
+    type_name = "state_machine_queue_actions"
+
+    def __init__(
+        self,
+        action_names: Optional[List[str]],
+        timestamp: Optional[float] = None,
+        metadata: Optional[Dict[Text, Any]] = None,
+    ) -> None:
+        """Creates event for setting action queue for the state machine state.
+
+        Args:
+            action_names: Name of actions
+            timestamp: When the event was created.
+            metadata: Additional event metadata.
+        """
+        self.action_names = action_names
+        super().__init__(timestamp, metadata)
+
+    def __str__(self) -> Text:
+        """Returns text representation of event."""
+        return f"StateMachineQueueActions({self.action_names})"
+
+    def __hash__(self) -> int:
+        """Returns unique hash for event."""
+        return hash(self.action_names)
+
+    def __eq__(self, other: Any) -> bool:
+        """Compares object with other object."""
+        if not isinstance(other, StateMachineQueueActions):
+            return NotImplemented
+
+        return self.action_names == other.action_names
+
+    def as_story_string(self) -> Text:
+        """Returns text representation of event."""
+        props = json.dumps(
+            {
+                StateMachineQueueActions.STATE_MACHINE_ACTION_QUEUE_NAME: self.action_names
+            }
+        )
+        return f"{StateMachineQueueActions.type_name}{props}"
+
+    @classmethod
+    def _from_story_string(
+        cls, parameters: Dict[Text, Any]
+    ) -> List["StateMachineQueueActions"]:
+        """Called to convert a parsed story line into an event."""
+        return [
+            StateMachineQueueActions(
+                parameters.get(
+                    StateMachineQueueActions.STATE_MACHINE_ACTION_QUEUE_NAME
+                ),
+                parameters.get("timestamp"),
+                parameters.get("metadata"),
+            )
+        ]
+
+    def as_dict(self) -> Dict[Text, Any]:
+        """Returns serialized event."""
+        d = super().as_dict()
+        d.update(
+            {
+                StateMachineQueueActions.STATE_MACHINE_ACTION_QUEUE_NAME: self.action_names
+            }
+        )
+        return d
+
+    def apply_to(self, tracker: "DialogueStateTracker") -> None:
+        """Applies event to current conversation state."""
+        tracker.queued_state_actions = self.action_names
+
+
+class StateMachineLifecycle(str, Enum):
+    ENTRY = "entry"
+    IN_STATE = "in_state"
+    EXIT = "exit"
+
+
+class StateMachineSetLifecycle(Event):
+    # """Set state machine lifecycle."""
+    STATE_MACHINE_LIFECYCLE = "lifecycle"
+
+    type_name = "state_machine_set_lifecycle"
+
+    def __init__(
+        self,
+        lifecycle: Optional[StateMachineLifecycle],
+        timestamp: Optional[float] = None,
+        metadata: Optional[Dict[Text, Any]] = None,
+    ) -> None:
+        """Creates event for setting state machine lifecycle.
+
+        Args:
+            lifecycle: State machine lifecycle
+            timestamp: When the event was created.
+            metadata: Additional event metadata.
+        """
+        self.lifecycle = lifecycle
+        super().__init__(timestamp, metadata)
+
+    def __str__(self) -> Text:
+        """Returns text representation of event."""
+        return f"StateMachineSetLifecycle({self.lifecycle})"
+
+    def __hash__(self) -> int:
+        """Returns unique hash for event."""
+        return hash(self.lifecycle)
+
+    def __eq__(self, other: Any) -> bool:
+        """Compares object with other object."""
+        if not isinstance(other, StateMachineSetLifecycle):
+            return NotImplemented
+
+        return self.lifecycle == other.lifecycle
+
+    def as_story_string(self) -> Text:
+        """Returns text representation of event."""
+        props = json.dumps(
+            {StateMachineSetLifecycle.STATE_MACHINE_LIFECYCLE: self.lifecycle}
+        )
+        return f"{StateMachineSetLifecycle.type_name}{props}"
+
+    @classmethod
+    def _from_story_string(
+        cls, parameters: Dict[Text, Any]
+    ) -> List["StateMachineSetLifecycle"]:
+        """Called to convert a parsed story line into an event."""
+        return [
+            StateMachineSetLifecycle(
+                parameters.get(
+                    StateMachineSetLifecycle.STATE_MACHINE_LIFECYCLE
+                ),
+                parameters.get("timestamp"),
+                parameters.get("metadata"),
+            )
+        ]
+
+    def as_dict(self) -> Dict[Text, Any]:
+        """Returns serialized event."""
+        d = super().as_dict()
+        d.update(
+            {StateMachineSetLifecycle.STATE_MACHINE_LIFECYCLE: self.lifecycle}
+        )
+        return d
+
+    def apply_to(self, tracker: "DialogueStateTracker") -> None:
+        """Applies event to current conversation state."""
+        tracker.state_machine_lifecycle = self.lifecycle
 
 
 class LegacyForm(ActiveLoop):
@@ -1744,7 +1949,9 @@ class LoopInterrupted(SkipEventInMDStoryMixin):
         return self.is_interrupted == other.is_interrupted
 
     @classmethod
-    def _from_parameters(cls, parameters: Dict[Text, Any]) -> "LoopInterrupted":
+    def _from_parameters(
+        cls, parameters: Dict[Text, Any]
+    ) -> "LoopInterrupted":
         return LoopInterrupted(
             parameters.get(LOOP_INTERRUPTED, False),
             parameters.get("timestamp"),
@@ -1847,7 +2054,9 @@ class ActionExecutionRejected(SkipEventInMDStoryMixin):
         return self.action_name == other.action_name
 
     @classmethod
-    def _from_parameters(cls, parameters: Dict[Text, Any]) -> "ActionExecutionRejected":
+    def _from_parameters(
+        cls, parameters: Dict[Text, Any]
+    ) -> "ActionExecutionRejected":
         return ActionExecutionRejected(
             parameters.get("name"),
             parameters.get("policy"),

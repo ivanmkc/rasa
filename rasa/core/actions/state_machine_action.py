@@ -3,8 +3,9 @@ import logging
 import json
 
 from rasa.core.actions import action
-from rasa.core.actions.loops import LoopAction
+from rasa.core.actions.action import Action
 from rasa.core.channels import OutputChannel
+from rasa.shared.core.constants import STATE_MACHINE_ACTION_NAME
 from rasa.shared.core.domain import Domain, InvalidDomain, SlotMapping, State
 
 from rasa.core.actions.action import ActionExecutionRejection, RemoteAction
@@ -17,7 +18,7 @@ from rasa.shared.constants import UTTER_PREFIX
 from rasa.shared.core.events import (
     Event,
     SlotSet,
-    ActionExecuted,
+    # ActionExecuted,
     ActiveLoop,
     ActionExecutionRejected,
 )
@@ -43,10 +44,12 @@ import random
 logger = logging.getLogger(__name__)
 
 
-class StateMachineAction(LoopAction):
+class StateMachineAction(Action):
     """Action which implements and executes the form logic."""
 
-    def __init__(self, action_endpoint: Optional[EndpointConfig]) -> None:
+    def __init__(
+        self, action_name: str, action_endpoint: Optional[EndpointConfig]
+    ) -> None:
         """Creates a `StateMachineAction`.
 
         Args:
@@ -54,13 +57,14 @@ class StateMachineAction(LoopAction):
             action_endpoint: Endpoint to execute custom actions.
         """
         # self._form_name = form_name
+        self._action_name = action_name
         self.action_endpoint = action_endpoint
         # creating it requires domain, which we don't have in init
         # we'll create it on the first call
         self._unique_entity_mappings = None
 
     def name(self) -> Text:
-        return "action_state_machine_action"
+        return self._action_name
 
     def required_slots(self, domain: Domain) -> List[Text]:
         """A list of required slots that the form has to fill.
@@ -139,7 +143,8 @@ class StateMachineAction(LoopAction):
             # + [SlotSet(REQUESTED_SLOT, self.get_slot_to_fill(current_tracker))]
             # Insert form execution event so that it's clearly distinguishable which
             # events were newly added.
-            + [ActionExecuted(self.name())] + additional_events,
+            # + [ActionExecuted(self.name())] + additional_events,
+            + additional_events,
             slots=domain.slots,
         )
 
@@ -157,111 +162,6 @@ class StateMachineAction(LoopAction):
             isinstance(event, ActionExecutionRejected)
             for event in validation_events
         )
-
-    @staticmethod
-    def _get_valid_slots(
-        slots: List[Slot],
-        tracker: DialogueStateTracker,
-        only_empty_slots: bool = False,
-    ) -> List[Slot]:
-        valid_slots = slots
-
-        # Get only unfilled slots
-        if only_empty_slots:
-            valid_slots = [
-                slot
-                for slot in valid_slots
-                if tracker.get_slot(slot.name) == None
-            ]
-
-        # Get slots that pass conditions
-        valid_slots = [
-            slot
-            for slot in valid_slots
-            if not slot.condition
-            or (slot.condition and slot.condition.is_valid(tracker))
-        ]
-
-        return valid_slots
-
-    @staticmethod
-    def _get_slot_values(
-        slots: List[Slot], tracker: "DialogueStateTracker"
-    ) -> Dict[str, Any]:
-        slot_values = {}
-
-        # Get valid slots from latest utterance
-        valid_slots = StateMachineAction._get_valid_slots(
-            slots=slots, tracker=tracker, only_empty_slots=False
-        )
-
-        for slot in valid_slots:
-            last_bot_uttered_action_name = (
-                tracker.latest_bot_utterance.metadata.get("utter_action")
-            )
-
-            if slot.only_fill_when_prompted:
-                if not last_bot_uttered_action_name or (
-                    last_bot_uttered_action_name
-                    not in [action.name for action in slot.prompt_actions]
-                ):
-                    continue
-
-            # Extract values using entities
-            values_for_slots: List[Any] = [
-                StateMachineAction.get_entity_value(
-                    entity, tracker, None, None
-                )
-                for entity in slot.entities
-            ]
-
-            # Extract values using intents
-            last_intent_name = tracker.latest_message.intent.get("name")
-            if last_intent_name:
-                for slot_intent, value in slot.intents.items():
-                    if isinstance(slot_intent, Intent):
-                        if slot_intent.name == last_intent_name:
-                            values_for_slots.append(value)
-                    elif isinstance(slot_intent, str):
-                        if slot_intent == last_intent_name:
-                            values_for_slots.append(value)
-
-            # Filter out None's
-            values_for_slots = [
-                value for value in values_for_slots if value is not None
-            ]
-
-            if len(values_for_slots) > 0:
-                # Take first entity extracted
-                slot_values.update({slot.name: values_for_slots[0]})
-
-        return slot_values
-
-    @staticmethod
-    def _get_response_action_names(
-        responses: List[Response], tracker: "DialogueStateTracker"
-    ) -> List[str]:
-        valid_responses = [
-            response
-            for response in responses
-            if response.condition.is_valid(tracker=tracker)
-        ]
-
-        # valid_responses_action_names = [
-        #     valid_response.actions[
-        #         random.randint(0, len(valid_response.actions) - 1)
-        #     ].name
-        #     for valid_response in valid_responses
-        #     if len(valid_response.actions) > 0
-        # ]
-
-        valid_responses_action_names = [
-            action.name
-            for valid_response in valid_responses
-            for action in valid_response.actions
-        ]
-
-        return valid_responses_action_names
 
     async def _get_slot_fill_events(
         self,
@@ -317,77 +217,11 @@ class StateMachineAction(LoopAction):
                 output_channel, nlg, temp_tracker, domain
             )
 
+            # slot_filled_action_events.append(
+            #     ActionExecuted(utterance_action.name())
+            # )
+
         return validation_events + slot_filled_action_events
-
-    async def _get_responses_events(
-        self,
-        responses: List[Response],
-        tracker: "DialogueStateTracker",
-        domain: Domain,
-        output_channel: OutputChannel,
-        nlg: NaturalLanguageGenerator,
-    ) -> List[Event]:
-        valid_responses_action_names = (
-            StateMachineAction._get_response_action_names(responses, tracker)
-        )
-
-        valid_responses_actions = [
-            action.action_for_name_or_text(
-                action_name,
-                domain,
-                self.action_endpoint,
-            )
-            for action_name in valid_responses_action_names
-        ]
-
-        events: List[Event] = []
-
-        for valid_responses_action in valid_responses_actions:
-            events += await valid_responses_action.run(
-                output_channel, nlg, tracker, domain
-            )
-
-        return events
-
-    async def _get_next_slot_events(
-        self,
-        slots: List[Slot],
-        tracker: "DialogueStateTracker",
-        domain: Domain,
-        output_channel: OutputChannel,
-        nlg: NaturalLanguageGenerator,
-    ) -> List[Event]:
-        # Get non-filled slots
-        empty_slots = StateMachineAction._get_valid_slots(
-            slots=slots, tracker=tracker, only_empty_slots=True
-        )
-
-        # Get next slot utterance
-        next_slot_prompt_action: Optional[str] = None
-
-        if len(empty_slots) > 0:
-            empty_slot = empty_slots[0]
-            if len(empty_slot.prompt_actions) == 0:
-                raise ActionExecutionRejection(
-                    self.name(),
-                    f"No prompt actions found for slot {empty_slot.name}",
-                )
-
-            randomIndex = random.randint(0, len(empty_slot.prompt_actions) - 1)
-            next_slot_utterance_name = empty_slot.prompt_actions[
-                randomIndex
-            ].name
-            next_slot_prompt_action = action.action_for_name_or_text(
-                next_slot_utterance_name,
-                domain,
-                self.action_endpoint,
-            )
-
-            return await next_slot_prompt_action.run(
-                output_channel, nlg, tracker, domain
-            )
-
-        return []
 
     async def _get_transitions_events(
         self,
@@ -538,24 +372,27 @@ class StateMachineAction(LoopAction):
             Events from the activation.
         """
 
-        logger.debug(f"Activated the form '{self.name()}'.")
-        # collect values of required slots filled before activation
-        prefilled_slots = {}
+        # Perhaps handle OnEntryCondition's here
+        return []
 
-        for slot_name in self.required_slots(domain):
-            if not self._should_request_slot(tracker, slot_name):
-                prefilled_slots[slot_name] = tracker.get_slot(slot_name)
+        # logger.debug(f"Activated the form '{self.name()}'.")
+        # # collect values of required slots filled before activation
+        # prefilled_slots = {}
 
-        if not prefilled_slots:
-            logger.debug("No pre-filled required slots to validate.")
-            return []
+        # for slot_name in self.required_slots(domain):
+        #     if not self._should_request_slot(tracker, slot_name):
+        #         prefilled_slots[slot_name] = tracker.get_slot(slot_name)
 
-        logger.debug(
-            f"Validating pre-filled required slots: {prefilled_slots}"
-        )
-        return await self.validate_slots(
-            prefilled_slots, tracker, domain, output_channel, nlg
-        )
+        # if not prefilled_slots:
+        #     logger.debug("No pre-filled required slots to validate.")
+        #     return []
+
+        # logger.debug(
+        #     f"Validating pre-filled required slots: {prefilled_slots}"
+        # )
+        # return await self.validate_slots(
+        #     prefilled_slots, tracker, domain, output_channel, nlg
+        # )
 
     async def do(
         self,
@@ -634,10 +471,6 @@ class StateMachineAction(LoopAction):
         Returns:
             Value of entity.
         """
-
-        # Return None if latest entity values were gathered before the active loop was set
-        if not tracker.active_loop_name:
-            return None
 
         # list is used to cover the case of list slot type
         value = list(

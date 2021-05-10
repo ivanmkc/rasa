@@ -1,13 +1,15 @@
 from typing import Any, List
-from rasa_sdk import Tracker
+
+# from rasa.shared.core.trackers import "DialogueStateTracker"
 import abc
 from rasa.shared.nlu.state_machine.state_machine_models import Intent, Slot
 from rasa.shared.nlu.state_machine.condition import Condition
+from rasa.shared.core.events import StateMachineLifecycle
 
 
 class OnEntryCondition(Condition):
-    def is_valid(self, tracker: Tracker):
-        return tracker.active_loop_name == None
+    def is_valid(self, tracker: "DialogueStateTracker"):
+        return tracker.state_machine_lifecycle == StateMachineLifecycle.ENTRY
 
 
 class IntentCondition(Condition):
@@ -16,7 +18,7 @@ class IntentCondition(Condition):
     def __init__(self, intent: Intent):
         self.intent = intent
 
-    def is_valid(self, tracker: Tracker):
+    def is_valid(self, tracker: "DialogueStateTracker"):
         last_intent_name = tracker.latest_message.intent.get("name")
         return self.intent.name == last_intent_name
 
@@ -27,7 +29,7 @@ class SlotsFilledCondition(Condition):
     def __init__(self, slots: [Slot]):
         self.slots = slots
 
-    def is_valid(self, tracker: Tracker):
+    def is_valid(self, tracker: "DialogueStateTracker"):
         return all([tracker.slots.get(slot.name).value for slot in self.slots])
 
 
@@ -39,7 +41,7 @@ class SlotEqualsCondition(Condition):
         self.slot = slot
         self.value = value
 
-    def is_valid(self, tracker: Tracker):
+    def is_valid(self, tracker: "DialogueStateTracker"):
         tracker_slot = tracker.slots.get(self.slot.name)
 
         if tracker_slot:
@@ -75,7 +77,7 @@ class AndCondition(Condition, ConditionWithConditions):
     def __init__(self, conditions: List[Condition]):
         self._conditions = conditions
 
-    def is_valid(self, tracker: Tracker):
+    def is_valid(self, tracker: "DialogueStateTracker"):
         return all(
             [condition.is_valid(tracker) for condition in self.conditions]
         )
@@ -89,7 +91,7 @@ class OrCondition(Condition, ConditionWithConditions):
     def __init__(self, conditions: List[Condition]):
         self._conditions = conditions
 
-    def is_valid(self, tracker: Tracker):
+    def is_valid(self, tracker: "DialogueStateTracker"):
         return any(
             [condition.is_valid(tracker) for condition in self.conditions]
         )

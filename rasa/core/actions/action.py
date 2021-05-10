@@ -9,6 +9,7 @@ import rasa.core
 from rasa.core.policies.policy import PolicyPrediction
 
 from rasa.shared.core import events
+from rasa.shared.core.constants import STATE_MACHINE_ACTION_NAME
 from rasa.core.constants import DEFAULT_REQUEST_TIMEOUT
 
 from rasa.nlu.constants import (
@@ -61,7 +62,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def default_actions(action_endpoint: Optional[EndpointConfig] = None) -> List["Action"]:
+def default_actions(
+    action_endpoint: Optional[EndpointConfig] = None,
+) -> List["Action"]:
     """List default actions."""
     from rasa.core.actions.two_stage_fallback import TwoStageFallbackAction
 
@@ -107,7 +110,9 @@ def action_for_index(
     )
 
 
-def is_retrieval_action(action_name: Text, retrieval_intents: List[Text]) -> bool:
+def is_retrieval_action(
+    action_name: Text, retrieval_intents: List[Text]
+) -> bool:
     """Check if an action name is a retrieval action.
 
     The name for a retrieval action has an extra `utter_` prefix added to
@@ -123,12 +128,15 @@ def is_retrieval_action(action_name: Text, retrieval_intents: List[Text]) -> boo
     """
 
     return (
-        ActionRetrieveResponse.intent_name_from_action(action_name) in retrieval_intents
+        ActionRetrieveResponse.intent_name_from_action(action_name)
+        in retrieval_intents
     )
 
 
 def action_for_name_or_text(
-    action_name_or_text: Text, domain: Domain, action_endpoint: Optional[EndpointConfig]
+    action_name_or_text: Text,
+    domain: Domain,
+    action_endpoint: Optional[EndpointConfig],
 ) -> "Action":
     """Retrieves an action by its name or by its text in case it's an end-to-end action.
 
@@ -167,16 +175,20 @@ def action_for_name_or_text(
 
     is_form = action_name_or_text in domain.form_names
     # Users can override the form by defining an action with the same name as the form
-    user_overrode_form_action = is_form and action_name_or_text in domain.user_actions
+    user_overrode_form_action = (
+        is_form and action_name_or_text in domain.user_actions
+    )
     if is_form and not user_overrode_form_action:
         from rasa.core.actions.forms import FormAction
 
         return FormAction(action_name_or_text, action_endpoint)
 
-    if action_name_or_text == "action_state_machine_action":  # Use constants
+    if (
+        action_name_or_text in domain.state_machine_action_names
+    ):  # Use constants
         from rasa.core.actions.state_machine_action import StateMachineAction
 
-        return StateMachineAction(action_endpoint)
+        return StateMachineAction(action_name_or_text, action_endpoint)
 
     return RemoteAction(action_name_or_text, action_endpoint)
 
@@ -194,7 +206,8 @@ def create_bot_utterance(message: Dict[Text, Any]) -> BotUttered:
             # to be the attachment if there is no other attachment (the
             # `.get` is intentional - no `pop` as we still need the image`
             # property to set it in the following line)
-            "attachment": message.pop("attachment", None) or message.get("image", None),
+            "attachment": message.pop("attachment", None)
+            or message.get("image", None),
             "image": message.pop("image", None),
             "custom": message.pop("custom", None),
         },
@@ -261,7 +274,9 @@ class Action:
 class ActionBotResponse(Action):
     """An action which only effect is to utter a response when it is run."""
 
-    def __init__(self, name: Text, silent_fail: Optional[bool] = False) -> None:
+    def __init__(
+        self, name: Text, silent_fail: Optional[bool] = False
+    ) -> None:
         """Creates action.
 
         Args:
@@ -280,7 +295,9 @@ class ActionBotResponse(Action):
         domain: "Domain",
     ) -> List[Event]:
         """Simple run implementation uttering a (hopefully defined) response."""
-        message = await nlg.generate(self.utter_action, tracker, output_channel.name())
+        message = await nlg.generate(
+            self.utter_action, tracker, output_channel.name()
+        )
         if message is None:
             if not self.silent_fail:
                 logger.error(
@@ -347,7 +364,9 @@ class ActionEndToEndResponse(Action):
 class ActionRetrieveResponse(ActionBotResponse):
     """An action which queries the Response Selector for the appropriate response."""
 
-    def __init__(self, name: Text, silent_fail: Optional[bool] = False) -> None:
+    def __init__(
+        self, name: Text, silent_fail: Optional[bool] = False
+    ) -> None:
         """Creates action. See docstring of parent class."""
         super().__init__(name, silent_fail)
         self.action_name = name
@@ -562,7 +581,9 @@ class ActionDeactivateLoop(Action):
 
 
 class RemoteAction(Action):
-    def __init__(self, name: Text, action_endpoint: Optional[EndpointConfig]) -> None:
+    def __init__(
+        self, name: Text, action_endpoint: Optional[EndpointConfig]
+    ) -> None:
 
         self._name = name
         self.action_endpoint = action_endpoint
@@ -642,7 +663,10 @@ class RemoteAction(Action):
                 )
             if generated_response:
                 draft = await nlg.generate(
-                    generated_response, tracker, output_channel.name(), **response
+                    generated_response,
+                    tracker,
+                    output_channel.name(),
+                    **response,
                 )
                 if not draft:
                     continue
@@ -683,7 +707,9 @@ class RemoteAction(Action):
 
         try:
             logger.debug(
-                "Calling action endpoint to run action '{}'.".format(self.name())
+                "Calling action endpoint to run action '{}'.".format(
+                    self.name()
+                )
             )
             response = await self.action_endpoint.request(
                 json=json_body, method="post", timeout=DEFAULT_REQUEST_TIMEOUT
@@ -741,7 +767,9 @@ class ActionExecutionRejection(RasaException):
     """Raising this exception will allow other policies
     to predict a different action"""
 
-    def __init__(self, action_name: Text, message: Optional[Text] = None) -> None:
+    def __init__(
+        self, action_name: Text, message: Optional[Text] = None
+    ) -> None:
         self.action_name = action_name
         self.message = message or "Custom action '{}' rejected to run".format(
             action_name
@@ -786,7 +814,9 @@ class ActionRevertFallbackEvents(Action):
 
 
 def has_user_affirmed(tracker: "DialogueStateTracker") -> bool:
-    return tracker.last_executed_action_has(ACTION_DEFAULT_ASK_AFFIRMATION_NAME)
+    return tracker.last_executed_action_has(
+        ACTION_DEFAULT_ASK_AFFIRMATION_NAME
+    )
 
 
 def _revert_affirmation_events(tracker: "DialogueStateTracker") -> List[Event]:
@@ -819,7 +849,9 @@ def _revert_single_affirmation_events() -> List[Event]:
     ]
 
 
-def _revert_successful_rephrasing(tracker: "DialogueStateTracker") -> List[Event]:
+def _revert_successful_rephrasing(
+    tracker: "DialogueStateTracker",
+) -> List[Event]:
     last_user_event = tracker.get_last_event_for(UserUttered)
     if not last_user_event:
         raise TypeError("Cannot find last event to revert to.")
@@ -861,7 +893,9 @@ class ActionDefaultAskAffirmation(Action):
         """Runs action. Please see parent class for the full docstring."""
         intent_to_affirm = tracker.latest_message.intent.get(INTENT_NAME_KEY)
 
-        intent_ranking = tracker.latest_message.parse_data.get(INTENT_RANKING_KEY, [])
+        intent_ranking = tracker.latest_message.parse_data.get(
+            INTENT_RANKING_KEY, []
+        )
         if (
             intent_to_affirm == DEFAULT_NLU_FALLBACK_INTENT_NAME
             and len(intent_ranking) > 1
