@@ -183,13 +183,6 @@ def action_for_name_or_text(
 
         return FormAction(action_name_or_text, action_endpoint)
 
-    if (
-        action_name_or_text in domain.state_machine_action_names
-    ):  # Use constants
-        from rasa.core.actions.state_machine_action import StateMachineAction
-
-        return StateMachineAction(action_name_or_text, action_endpoint)
-
     return RemoteAction(action_name_or_text, action_endpoint)
 
 

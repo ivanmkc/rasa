@@ -223,7 +223,7 @@ class DialogueStateTracker:
         self.latest_bot_utterance = None
         self._reset()
         self.active_loop: "TrackerActiveLoop" = {}
-        self.queued_state_actions = None
+        self.queued_state_action_probabilities = None
         self.state_machine_lifecycle = None
 
     ###
@@ -231,7 +231,7 @@ class DialogueStateTracker:
     ###
     @property
     def has_entered_state(self) -> bool:
-        return self.queued_state_actions is not None
+        return self.queued_state_action_probabilities is not None
 
     def current_state(
         self, event_verbosity: EventVerbosity = EventVerbosity.NONE

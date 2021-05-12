@@ -2,7 +2,6 @@ import logging
 from typing import Any, List, Dict, Text, Optional, Set, Tuple, TYPE_CHECKING
 
 from rasa.shared.constants import DOCS_URL_RULES
-from rasa.shared.core.constants import STATE_MACHINE_ACTION_NAME
 from rasa.shared.exceptions import RasaException
 import rasa.shared.utils.io
 from rasa.shared.core.events import (
@@ -105,7 +104,6 @@ class StateMachinePolicy(MemoizationPolicy):
             "priority": self.priority,
             "lookup": self.lookup,
             "core_fallback_threshold": self._core_fallback_threshold,
-            "core_fallback_action_name": self._fallback_action_name,
             "enable_fallback_prediction": self._enable_fallback_prediction,
         }
 
@@ -128,7 +126,6 @@ class StateMachinePolicy(MemoizationPolicy):
         priority: int = RULE_POLICY_PRIORITY,
         lookup: Optional[Dict] = None,
         core_fallback_threshold: float = DEFAULT_CORE_FALLBACK_THRESHOLD,
-        core_fallback_action_name: Text = ACTION_DEFAULT_FALLBACK_NAME,
         enable_fallback_prediction: bool = True,
         restrict_rules: bool = True,
         check_for_contradictions: bool = True,
@@ -145,8 +142,6 @@ class StateMachinePolicy(MemoizationPolicy):
                 state.
             core_fallback_threshold: Confidence of the prediction if no rule matched
                 and de-facto threshold for a core fallback.
-            core_fallback_action_name: Name of the action which should be predicted
-                if no rule matched.
             enable_fallback_prediction: If `True` `core_fallback_action_name` is
                 predicted in case no rule matched.
             restrict_rules: If `True` rules are restricted to contain a maximum of 1
@@ -155,7 +150,6 @@ class StateMachinePolicy(MemoizationPolicy):
             check_for_contradictions: Check for contradictions.
         """
         self._core_fallback_threshold = core_fallback_threshold
-        self._fallback_action_name = core_fallback_action_name
         self._enable_fallback_prediction = enable_fallback_prediction
         self._restrict_rules = restrict_rules
         self._check_for_contradictions = check_for_contradictions
@@ -206,13 +200,40 @@ class StateMachinePolicy(MemoizationPolicy):
             )
 
         # Queue actions if not already queued
-        if tracker.queued_state_actions is None:
-            action_names = StateMachinePolicy._get_actions_names(
-                tracker=tracker, domain=domain
+        next_slot_actions: List[str] = []
+        if tracker.queued_state_action_probabilities is None:
+            # Get current state info
+            state_machine_state: StateMachineState = (
+                domain.active_state_machine_state
             )
 
+            action_names = []
+            if state_machine_state:
+                (
+                    action_names,
+                    next_slot_actions,
+                ) = StateMachinePolicy._get_actions_names(
+                    state_machine_state=state_machine_state,
+                    tracker=tracker,
+                    domain=domain,
+                )
+
+                # # Ask for next slot
+                # # TODO: If last action predicted was not from StateMachinePolicy, call this
+                # if len(action_names) > 0:
+                #     action_names += next_slot_actions
+
             tracker.update_with_events(
-                [StateMachineQueueActions(action_names)], domain
+                [
+                    StateMachineQueueActions(
+                        [(action_name, 1.0) for action_name in action_names]
+                        + [
+                            (next_slot_action, self._core_fallback_threshold)
+                            for next_slot_action in next_slot_actions
+                        ]
+                    )
+                ],
+                domain,
             )
 
             tracker.update_with_events(
@@ -223,21 +244,49 @@ class StateMachinePolicy(MemoizationPolicy):
             )
 
         # Check if there are any queued actions
-        queued_action_name = None
-        if len(tracker.queued_state_actions) > 0:
-            queued_action_name = tracker.queued_state_actions.pop(0)
+        queued_action_probability = None
+        if len(tracker.queued_state_action_probabilities) > 0:
+            queued_action_probability = (
+                tracker.queued_state_action_probabilities.pop(0)
+            )
         else:
             # All queued actions were run, set queue to None
             tracker.update_with_events(
                 [StateMachineQueueActions(None)], domain
             )
 
-        return self._rule_prediction(
-            self._prediction_result(queued_action_name, tracker, domain),
-            None,
-            returning_from_unhappy_path=False,
-            is_end_to_end_prediction=False,
-        )
+        if queued_action_probability:
+            # Predict action
+            logger.debug(
+                f"StateMachinePolicy predicted '{queued_action_probability}' by queued_action_probability."
+            )
+
+            queued_action_name = queued_action_probability[0]
+            queued_action_probability_only = queued_action_probability[1]
+
+            predictions = self._prediction_result(None, tracker, domain)
+
+            if self._enable_fallback_prediction:
+                predictions[
+                    domain.index_for_action(queued_action_name)
+                ] = queued_action_probability_only
+
+            return self._rule_prediction(
+                predictions,
+                None,
+                returning_from_unhappy_path=False,
+                is_end_to_end_prediction=False,
+            )
+        else:
+            logger.debug(f"StateMachinePolicy deferring to next policy.")
+
+            # Defer to next policy
+            return self._rule_prediction(
+                self._prediction_result(None, tracker, domain),
+                None,
+                returning_from_unhappy_path=False,
+                is_end_to_end_prediction=False,
+            )
 
     @staticmethod
     def _get_valid_slots(
@@ -376,17 +425,10 @@ class StateMachinePolicy(MemoizationPolicy):
 
     @staticmethod
     def _get_actions_names(
-        tracker: DialogueStateTracker, domain: Domain
-    ) -> List[Action]:
-        # Get current state info
-        state_machine_state: StateMachineState = (
-            domain.active_state_machine_state
-        )
-
-        if not state_machine_state:
-            # Return no prediction
-            return []
-
+        state_machine_state: StateMachineState,
+        tracker: DialogueStateTracker,
+        domain: Domain,
+    ) -> Tuple[List[Action], List[Action]]:
         # If there are slots to fill, predict slot fill
         # Check if there are slots to fill
         slot_values = StateMachinePolicy._get_slot_values(
@@ -435,21 +477,20 @@ class StateMachinePolicy(MemoizationPolicy):
             responses=state_machine_state.responses, tracker=temp_tracker
         )
 
-        # Ask for next slot
-        next_slot_actions = StateMachinePolicy._get_next_slot_actions(
-            state_machine_state.slots, tracker=temp_tracker
-        )
-
         # TODO: Handle transitions
 
         action_names: List[str] = [
-            action.name
-            for action in slot_filled_actions
-            + response_actions
-            + next_slot_actions
+            action.name for action in slot_filled_actions + response_actions
         ]
 
-        return action_names
+        next_slot_actions = [
+            action.name
+            for action in StateMachinePolicy._get_next_slot_actions(
+                state_machine_state.slots, tracker=temp_tracker
+            )
+        ]
+
+        return (action_names, next_slot_actions)
 
     def _rule_prediction(
         self,
@@ -470,12 +511,3 @@ class StateMachinePolicy(MemoizationPolicy):
             is_no_user_prediction=is_no_user_prediction,
             hide_rule_turn=False,
         )
-
-    def _default_predictions(self, domain: Domain) -> List[float]:
-        result = super()._default_predictions(domain)
-
-        if self._enable_fallback_prediction:
-            result[
-                domain.index_for_action(self._fallback_action_name)
-            ] = self._core_fallback_threshold
-        return result

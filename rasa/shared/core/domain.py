@@ -685,13 +685,6 @@ class Domain:
         domain_dict = self.as_dict()
         return self.__class__.from_dict(copy.deepcopy(domain_dict, memo))
 
-    @property
-    def state_machine_action_names(self) -> List[str]:
-        if not self.active_state_machine_state:
-            return []
-
-        return [action.name() for action in self.active_state_machine_state.all_actions()]
-
     @staticmethod
     def _collect_overridden_default_intents(
         intents: Union[Set[Text], List[Text], List[Dict[Text, Any]]]

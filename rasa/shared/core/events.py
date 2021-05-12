@@ -1741,40 +1741,40 @@ class StateMachineQueueActions(Event):
 
     def __init__(
         self,
-        action_names: Optional[List[str]],
+        action_probabilities: Optional[List[Tuple[str, float]]],
         timestamp: Optional[float] = None,
         metadata: Optional[Dict[Text, Any]] = None,
     ) -> None:
         """Creates event for setting action queue for the state machine state.
 
         Args:
-            action_names: Name of actions
+            action_probabilities: Name of actions and probability
             timestamp: When the event was created.
             metadata: Additional event metadata.
         """
-        self.action_names = action_names
+        self.action_probabilities = action_probabilities
         super().__init__(timestamp, metadata)
 
     def __str__(self) -> Text:
         """Returns text representation of event."""
-        return f"StateMachineQueueActions({self.action_names})"
+        return f"StateMachineQueueActions({self.action_probabilities})"
 
     def __hash__(self) -> int:
         """Returns unique hash for event."""
-        return hash(self.action_names)
+        return hash(self.action_probabilities)
 
     def __eq__(self, other: Any) -> bool:
         """Compares object with other object."""
         if not isinstance(other, StateMachineQueueActions):
             return NotImplemented
 
-        return self.action_names == other.action_names
+        return self.action_probabilities == other.action_probabilities
 
     def as_story_string(self) -> Text:
         """Returns text representation of event."""
         props = json.dumps(
             {
-                StateMachineQueueActions.STATE_MACHINE_ACTION_QUEUE_NAME: self.action_names
+                StateMachineQueueActions.STATE_MACHINE_ACTION_QUEUE_NAME: self.action_probabilities
             }
         )
         return f"{StateMachineQueueActions.type_name}{props}"
@@ -1799,14 +1799,14 @@ class StateMachineQueueActions(Event):
         d = super().as_dict()
         d.update(
             {
-                StateMachineQueueActions.STATE_MACHINE_ACTION_QUEUE_NAME: self.action_names
+                StateMachineQueueActions.STATE_MACHINE_ACTION_QUEUE_NAME: self.action_probabilities
             }
         )
         return d
 
     def apply_to(self, tracker: "DialogueStateTracker") -> None:
         """Applies event to current conversation state."""
-        tracker.queued_state_actions = self.action_names
+        tracker.queued_state_action_probabilities = self.action_probabilities
 
 
 class StateMachineLifecycle(str, Enum):
