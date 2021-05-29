@@ -29,7 +29,6 @@ from rasa.shared.core.constants import (
     ACTION_RESTART_NAME,
     ACTION_SESSION_START_NAME,
     ACTION_DEFAULT_FALLBACK_NAME,
-    ACTION_DEFAULT_FALLBACK_NAME_WITHOUT_REVERT,
     ACTION_DEACTIVATE_LOOP_NAME,
     ACTION_REVERT_FALLBACK_EVENTS_NAME,
     ACTION_DEFAULT_ASK_AFFIRMATION_NAME,
@@ -532,31 +531,6 @@ class ActionDefaultFallback(ActionBotResponse):
     def name(self) -> Text:
         """Returns action default fallback name."""
         return ACTION_DEFAULT_FALLBACK_NAME
-
-    def __init__(self) -> None:
-        """Initializes action default fallback."""
-        super().__init__("utter_default", silent_fail=True)
-
-    async def run(
-        self,
-        output_channel: "OutputChannel",
-        nlg: "NaturalLanguageGenerator",
-        tracker: "DialogueStateTracker",
-        domain: "Domain",
-    ) -> List[Event]:
-        """Runs action. Please see parent class for the full docstring."""
-        # only utter the response if it is available
-        evts = await super().run(output_channel, nlg, tracker, domain)
-
-        return evts + [UserUtteranceReverted()]
-
-
-class ActionDefaultFallbackWithoutRevert(ActionBotResponse):
-    """Executes the fallback action and goes back to the prev state of the dialogue."""
-
-    def name(self) -> Text:
-        """Returns action default fallback name."""
-        return ACTION_DEFAULT_FALLBACK_NAME_WITHOUT_REVERT
 
     def __init__(self) -> None:
         """Initializes action default fallback."""
