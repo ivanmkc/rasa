@@ -29,6 +29,7 @@ from rasa.shared.core.constants import (
     ACTION_RESTART_NAME,
     ACTION_SESSION_START_NAME,
     ACTION_DEFAULT_FALLBACK_NAME,
+    ACTION_DEFAULT_FALLBACK_NAME_WITHOUT_REVERT,
     ACTION_DEACTIVATE_LOOP_NAME,
     ACTION_REVERT_FALLBACK_EVENTS_NAME,
     ACTION_DEFAULT_ASK_AFFIRMATION_NAME,
@@ -49,6 +50,7 @@ from rasa.shared.core.events import (
     ActiveLoop,
     Restarted,
     SessionStarted,
+    FollowupAction,
 )
 from rasa.shared.utils.schemas.events import EVENTS_SCHEMA
 from rasa.utils.endpoints import EndpointConfig, ClientResponseError
@@ -64,7 +66,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def default_actions(action_endpoint: Optional[EndpointConfig] = None) -> List["Action"]:
+def default_actions(
+    action_endpoint: Optional[EndpointConfig] = None,
+) -> List["Action"]:
     """List default actions."""
     from rasa.core.actions.two_stage_fallback import TwoStageFallbackAction
 
@@ -132,7 +136,9 @@ def is_retrieval_action(action_name: Text, retrieval_intents: List[Text]) -> boo
 
 
 def action_for_name_or_text(
-    action_name_or_text: Text, domain: Domain, action_endpoint: Optional[EndpointConfig]
+    action_name_or_text: Text,
+    domain: Domain,
+    action_endpoint: Optional[EndpointConfig],
 ) -> "Action":
     """Retrieves an action by its name or by its text in case it's an end-to-end action.
 
@@ -545,6 +551,31 @@ class ActionDefaultFallback(ActionBotResponse):
         return evts + [UserUtteranceReverted()]
 
 
+class ActionDefaultFallbackWithoutRevert(ActionBotResponse):
+    """Executes the fallback action and goes back to the prev state of the dialogue."""
+
+    def name(self) -> Text:
+        """Returns action default fallback name."""
+        return ACTION_DEFAULT_FALLBACK_NAME_WITHOUT_REVERT
+
+    def __init__(self) -> None:
+        """Initializes action default fallback."""
+        super().__init__("utter_default", silent_fail=True)
+
+    async def run(
+        self,
+        output_channel: "OutputChannel",
+        nlg: "NaturalLanguageGenerator",
+        tracker: "DialogueStateTracker",
+        domain: "Domain",
+    ) -> List[Event]:
+        """Runs action. Please see parent class for the full docstring."""
+        # only utter the response if it is available
+        evts = await super().run(output_channel, nlg, tracker, domain)
+
+        return evts + [FollowupAction(ACTION_LISTEN_NAME)]
+
+
 class ActionDeactivateLoop(Action):
     """Deactivates an active loop."""
 
@@ -639,7 +670,10 @@ class RemoteAction(Action):
                 )
             if generated_response:
                 draft = await nlg.generate(
-                    generated_response, tracker, output_channel.name(), **response
+                    generated_response,
+                    tracker,
+                    output_channel.name(),
+                    **response,
                 )
                 if not draft:
                     continue
@@ -838,7 +872,9 @@ def _revert_single_affirmation_events() -> List[Event]:
     ]
 
 
-def _revert_successful_rephrasing(tracker: "DialogueStateTracker") -> List[Event]:
+def _revert_successful_rephrasing(
+    tracker: "DialogueStateTracker",
+) -> List[Event]:
     last_user_event = tracker.get_last_event_for(UserUttered)
     if not last_user_event:
         raise TypeError("Cannot find last event to revert to.")

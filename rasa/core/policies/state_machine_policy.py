@@ -185,7 +185,9 @@ class StateMachinePolicy(MemoizationPolicy):
         pass
 
     @staticmethod
-    def was_interrupted_by_other_policy(tracker: DialogueStateTracker,) -> bool:
+    def was_interrupted_by_other_policy(
+        tracker: DialogueStateTracker,
+    ) -> bool:
         for event in reversed(tracker.events):
             # Only look for ActionExecuted events
             if isinstance(event, ActionExecuted):
@@ -221,7 +223,10 @@ class StateMachinePolicy(MemoizationPolicy):
             and target_state_machine_state_name
         ):
             tracker.update_with_events(
-                [StateMachineTransition(target_state_machine_state_name),], domain,
+                [
+                    StateMachineTransition(target_state_machine_state_name),
+                ],
+                domain,
             )
 
             logger.debug(
@@ -244,8 +249,8 @@ class StateMachinePolicy(MemoizationPolicy):
             )
 
         # Queue actions if not already queued
-        was_interrupted_by_other_policy = StateMachinePolicy.was_interrupted_by_other_policy(
-            tracker
+        was_interrupted_by_other_policy = (
+            StateMachinePolicy.was_interrupted_by_other_policy(tracker)
         )
         if (
             tracker.queued_state_action_probabilities is None
@@ -272,27 +277,25 @@ class StateMachinePolicy(MemoizationPolicy):
             # Update state if changed
             state_machine_state = tracker.get_active_state_machine_state(domain)
             # Get next slot actions
-            actions += StateMachinePolicy._get_next_slot_actions(
-                state_machine_state.slots, tracker=tracker,
+            next_slot_actions: List[Action] = StateMachinePolicy._get_next_slot_actions(
+                state_machine_state.slots,
+                tracker=tracker,
             )
+
+            actions_to_queue = [(action.name, 1.0) for action in actions] + [
+                (
+                    next_slot_action.name,
+                    self._next_slot_action_confidence,
+                )
+                for next_slot_action in next_slot_actions
+            ]
+
+            if len(actions_to_queue) > 0:
+                actions_to_queue += [(ACTION_LISTEN_NAME, 1.0)]
 
             tracker.update_with_events(
                 [
-                    StateMachineQueueActions(
-                        [(action.name, 1.0) for action in actions]
-                        # + [
-                        #     (
-                        #         next_slot_action,
-                        #         self._next_slot_action_confidence,
-                        #     )
-                        #     for next_slot_action in next_slot_actions
-                        # ]
-                        # + [
-                        #     (utterance.name, 1.0)
-                        #     for utterance in transition_utterances
-                        # ]
-                        + ([(ACTION_LISTEN_NAME, 1.0)] if len(actions) > 0 else [])
-                    ),
+                    StateMachineQueueActions(actions_to_queue),
                 ],
                 domain,
             )
@@ -304,7 +307,17 @@ class StateMachinePolicy(MemoizationPolicy):
         # Check if there are any queued actions
         queued_action_probability = None
         if len(tracker.queued_state_action_probabilities) > 0:
-            queued_action_probability = tracker.queued_state_action_probabilities.pop(0)
+            queued_state_action_probabilities = (
+                tracker.queued_state_action_probabilities.copy()
+            )
+            queued_action_probability = queued_state_action_probabilities.pop(0)
+
+            tracker.update_with_events(
+                [
+                    StateMachineQueueActions(queued_state_action_probabilities),
+                ],
+                domain,
+            )
 
             logger.debug(
                 f"StateMachinePolicy found queued action: {queued_action_probability}"
@@ -313,7 +326,10 @@ class StateMachinePolicy(MemoizationPolicy):
         # If there are no more actions, queue is finished. Set to None
         if len(tracker.queued_state_action_probabilities) == 0:
             tracker.update_with_events(
-                [StateMachineQueueActions(None),], domain,
+                [
+                    StateMachineQueueActions(None),
+                ],
+                domain,
             )
             logger.debug(
                 f"StateMachinePolicy set queue to None due to no more queued actions."
@@ -442,7 +458,9 @@ class StateMachinePolicy(MemoizationPolicy):
 
         # Get valid slots from latest utterance
         valid_slots = StateMachinePolicy._get_valid_slots(
-            slots=slots, tracker=tracker, only_empty_slots=False,
+            slots=slots,
+            tracker=tracker,
+            only_empty_slots=False,
         )
 
         last_bot_uttered_action_name = tracker.latest_bot_utterance.metadata.get(
@@ -522,7 +540,8 @@ class StateMachinePolicy(MemoizationPolicy):
 
     @staticmethod
     def _get_next_slot_actions(
-        slots: List[Slot], tracker: DialogueStateTracker,
+        slots: List[Slot],
+        tracker: DialogueStateTracker,
     ) -> List[Action]:
         # Get non-filled slots
         empty_slots = StateMachinePolicy._get_valid_slots(

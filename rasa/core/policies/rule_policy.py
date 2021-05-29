@@ -25,7 +25,10 @@ from rasa.shared.core.trackers import (
     is_prev_action_listen_in_state,
 )
 from rasa.shared.core.generator import TrackerWithCachedStates
-from rasa.core.constants import DEFAULT_CORE_FALLBACK_THRESHOLD, RULE_POLICY_PRIORITY
+from rasa.core.constants import (
+    DEFAULT_CORE_FALLBACK_THRESHOLD,
+    RULE_POLICY_PRIORITY,
+)
 from rasa.shared.core.constants import (
     USER_INTENT_RESTART,
     USER_INTENT_BACK,
@@ -200,7 +203,9 @@ class RulePolicy(MemoizationPolicy):
         return json.dumps(new_states, sort_keys=True)
 
     @staticmethod
-    def _states_for_unhappy_loop_predictions(states: List[State]) -> List[State]:
+    def _states_for_unhappy_loop_predictions(
+        states: List[State],
+    ) -> List[State]:
         """Modifies the states to create feature keys for loop unhappy path conditions.
 
         Args:
@@ -463,7 +468,10 @@ class RulePolicy(MemoizationPolicy):
         return predicted_action_name, prediction_source
 
     def _predicted_action_name(
-        self, tracker: TrackerWithCachedStates, domain: Domain, gold_action_name: Text
+        self,
+        tracker: TrackerWithCachedStates,
+        domain: Domain,
+        gold_action_name: Text,
     ) -> Tuple[Optional[Text], Optional[Text]]:
         predicted_action_name, prediction_source = self._predict_next_action(
             tracker, domain
@@ -477,9 +485,10 @@ class RulePolicy(MemoizationPolicy):
             and predicted_action_name == tracker.active_loop_name
         ):
             rasa.core.test.emulate_loop_rejection(tracker)
-            predicted_action_name, prediction_source = self._predict_next_action(
-                tracker, domain
-            )
+            (
+                predicted_action_name,
+                prediction_source,
+            ) = self._predict_next_action(tracker, domain)
 
         return predicted_action_name, prediction_source
 
@@ -627,7 +636,10 @@ class RulePolicy(MemoizationPolicy):
                     continue
 
                 gold_action_name = event.action_name or event.action_text
-                predicted_action_name, prediction_source = self._predicted_action_name(
+                (
+                    predicted_action_name,
+                    prediction_source,
+                ) = self._predicted_action_name(
                     running_tracker, domain, gold_action_name
                 )
                 if collect_sources:
@@ -892,7 +904,8 @@ class RulePolicy(MemoizationPolicy):
             # find rule keys that correspond to current state
             possible_keys = set(
                 filter(
-                    lambda _key: self._is_rule_applicable(_key, i, state), possible_keys
+                    lambda _key: self._is_rule_applicable(_key, i, state),
+                    possible_keys,
                 )
             )
         return possible_keys
