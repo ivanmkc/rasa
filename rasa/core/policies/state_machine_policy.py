@@ -3,7 +3,6 @@ from typing import Any, List, Dict, Text, Optional, Set, Tuple, TYPE_CHECKING
 
 from rasa.shared.constants import DOCS_URL_RULES
 from rasa.shared.exceptions import RasaException
-import rasa.shared.utils.io
 from rasa.shared.core.events import (
     LoopInterrupted,
     SlotSet,
@@ -571,6 +570,7 @@ class StateMachinePolicy(MemoizationPolicy):
         tracker: DialogueStateTracker,
         domain: Domain,
         intent_threshold_for_slot_fill: float,
+        triggered_transition_state_names: Set[str] = set(),
     ) -> List[Action]:
         # If there are slots to fill, predict slot fill
         # Check if there are slots to fill
@@ -632,7 +632,7 @@ class StateMachinePolicy(MemoizationPolicy):
 
         if len(response_actions) > 0:
             logger.debug(
-                f"StateMachinePolicy found response_actions = '{response_actions}'"
+                f"StateMachinePolicy found response_actions = '{[action.name for action in response_actions]}'"
             )
 
         tracker.update_with_events(
@@ -642,7 +642,12 @@ class StateMachinePolicy(MemoizationPolicy):
 
         # Check transitions
         valid_transition = StateMachinePolicy._get_valid_transition(
-            transitions=state_machine_state.transitions,
+            transitions=[
+                transition
+                for transition in state_machine_state.transitions
+                if transition.destination_state_name
+                not in triggered_transition_state_names  # Only use transitions that weren't used before
+            ],
             prev_tracker=prev_tracker,
             tracker=tracker,
         )
@@ -671,15 +676,10 @@ class StateMachinePolicy(MemoizationPolicy):
                     tracker=tracker,
                     domain=domain,
                     intent_threshold_for_slot_fill=intent_threshold_for_slot_fill,
+                    triggered_transition_state_names=triggered_transition_state_names.union(
+                        set([valid_transition.destination_state_name])
+                    ),
                 )
-
-        # action_names: List[str] = [
-        #     action.name
-        #     for action in
-        # ]
-
-        # # Finally, update tracker with slot_set_events
-        # tracker.update_with_events(new_events=slot_set_events, domain=domain)
 
         return slot_filled_actions + response_actions + transition_actions
 

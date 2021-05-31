@@ -21,7 +21,10 @@ class Response:
     repeatable: bool  # TODO: Figure out how to handle repeatable
 
     def __init__(
-        self, condition: Condition, actions: List[Action], repeatable: bool = True,
+        self,
+        condition: Condition,
+        actions: List[Action],
+        repeatable: bool = True,
     ):
         self.condition = condition
         self.repeatable = repeatable
