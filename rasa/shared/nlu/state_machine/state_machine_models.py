@@ -10,7 +10,10 @@ import rasa.shared.core.slots as rasa_slots
 
 class Intent(YAMLConvertable, StoryYAMLConvertable):
     def __init__(
-        self, examples: Union[str, List[str]] = [], name: Optional[str] = None
+        self,
+        examples: Union[str, List[str]] = [],
+        name: Optional[str] = None,
+        entities: List[str] = [],
     ):
         if isinstance(examples, str):
             examples = [examples]
@@ -30,6 +33,8 @@ class Intent(YAMLConvertable, StoryYAMLConvertable):
             )
             self.name = "_".join(text_stripped.split(" "))
 
+        self.entities = entities
+
     def as_nlu_yaml(self) -> Dict[str, Any]:
         return {
             "intent": self.name,
@@ -37,7 +42,12 @@ class Intent(YAMLConvertable, StoryYAMLConvertable):
         }
 
     def as_story_yaml(self) -> Dict[str, Any]:
-        return {"intent": self.name}
+        dict = {"intent": self.name}
+
+        if self.entities:
+            dict["entities"] = self.entities
+
+        return dict
 
 
 class Action(StoryYAMLConvertable):
