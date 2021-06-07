@@ -8,7 +8,24 @@ from rasa.shared.nlu.state_machine.condition import Condition
 import rasa.shared.core.slots as rasa_slots
 
 
-class Intent(YAMLConvertable, StoryYAMLConvertable):
+class Intent(StoryYAMLConvertable):
+    name: str
+    entities: List[str]
+
+    def __init__(self, name: str, entities: List[str] = []):
+        self.name = name
+        self.entities = entities
+
+    def as_story_yaml(self) -> Dict[str, Any]:
+        dict = {"intent": self.name}
+
+        if self.entities:
+            dict["entities"] = self.entities
+
+        return dict
+
+
+class IntentWithExamples(YAMLConvertable, Intent):
     def __init__(
         self,
         examples: Union[str, List[str]] = [],
@@ -40,14 +57,6 @@ class Intent(YAMLConvertable, StoryYAMLConvertable):
             "intent": self.name,
             "examples": "\n".join([f"- {example}" for example in self.examples]),
         }
-
-    def as_story_yaml(self) -> Dict[str, Any]:
-        dict = {"intent": self.name}
-
-        if self.entities:
-            dict["entities"] = self.entities
-
-        return dict
 
 
 class Action(StoryYAMLConvertable):
