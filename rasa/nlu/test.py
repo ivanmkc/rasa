@@ -1275,7 +1275,9 @@ def get_eval_data(
                 # Revert fallback prediction to not shadow
                 # the wrongly predicted intent
                 # during the test phase.
-                result = fallback_classifier.undo_fallback_prediction(result)
+                result = rasa.nlu.classifiers.fallback_classifier.undo_fallback_prediction(
+                    result
+                )
             intent_prediction = result.get(INTENT, {}) or {}
 
             intent_results.append(
@@ -1411,6 +1413,7 @@ def remove_pretrained_extractors(pipeline: List[Component]) -> List[Component]:
 
 async def run_evaluation(
     data_path: Text,
+    domain_path: Text,
     model_path: Text,
     output_directory: Optional[Text] = None,
     successes: bool = False,
@@ -1444,7 +1447,7 @@ async def run_evaluation(
 
     interpreter.pipeline = remove_pretrained_extractors(interpreter.pipeline)
     test_data_importer = TrainingDataImporter.load_from_dict(
-        training_data_paths=[data_path], domain_path=DEFAULT_DOMAIN_PATH,
+        training_data_paths=[data_path], domain_path=domain_path,
     )
     test_data = await test_data_importer.get_nlu_data()
 

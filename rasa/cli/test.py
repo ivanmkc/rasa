@@ -103,7 +103,7 @@ def run_core_test(args: argparse.Namespace) -> None:
 
         if args.evaluate_model_directory:
             test_core_models_in_directory(
-                args.model, stories, output, use_conversation_test_files=args.e2e
+                args.model, stories, output, use_conversation_test_files=args.e2e,
             )
         else:
             test_core(
@@ -127,6 +127,7 @@ def run_core_test(args: argparse.Namespace) -> None:
 async def run_nlu_test_async(
     config: Optional[Union[Text, List[Text]]],
     data_path: Text,
+    domain_path: Text,
     models_path: Text,
     output_dir: Text,
     cross_validation: bool,
@@ -160,7 +161,7 @@ async def run_nlu_test_async(
 
     data_path = rasa.cli.utils.get_validated_path(data_path, "nlu", DEFAULT_DATA_PATH)
     test_data_importer = TrainingDataImporter.load_from_dict(
-        training_data_paths=[data_path], domain_path=DEFAULT_DOMAIN_PATH,
+        training_data_paths=[data_path], domain_path=domain_path,
     )
     nlu_data = await test_data_importer.get_nlu_data()
 
@@ -208,7 +209,7 @@ async def run_nlu_test_async(
             models_path, "model", DEFAULT_MODELS_PATH
         )
 
-        await test_nlu(model_path, data_path, output, all_args)
+        await test_nlu(model_path, data_path, domain_path, output, all_args)
 
 
 def run_nlu_test(args: argparse.Namespace) -> None:
@@ -221,6 +222,7 @@ def run_nlu_test(args: argparse.Namespace) -> None:
         run_nlu_test_async(
             args.config,
             args.nlu,
+            args.domain,
             args.model,
             args.out,
             args.cross_validation,
