@@ -9,6 +9,7 @@ from rasa.cli.arguments.default_arguments import (
     add_nlu_data_param,
     add_endpoint_param,
     add_out_param,
+    add_domain_param,
 )
 from rasa.model import get_latest_model
 
@@ -64,7 +65,8 @@ def add_test_core_argument_group(
             "format.",
         )
     add_endpoint_param(
-        parser, help_text="Configuration file for the connectors as a yml file."
+        parser,
+        help_text="Configuration file for the connectors as a yml file.",
     )
     parser.add_argument(
         "--fail-on-prediction-errors",
@@ -97,6 +99,7 @@ def add_test_nlu_argument_group(
     parser: Union[argparse.ArgumentParser, argparse._ActionsContainer]
 ) -> None:
     add_nlu_data_param(parser, help_text="File or folder containing your NLU data.")
+    add_domain_param(parser)
 
     add_out_param(
         parser,
@@ -166,7 +169,9 @@ def add_test_core_model_param(parser: argparse.ArgumentParser) -> None:
 
 
 def add_no_plot_param(
-    parser: argparse.ArgumentParser, default: bool = False, required: bool = False
+    parser: argparse.ArgumentParser,
+    default: bool = False,
+    required: bool = False,
 ) -> None:
     parser.add_argument(
         "--no-plot",

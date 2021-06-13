@@ -194,6 +194,7 @@ def test_core(
 async def test_nlu(
     model: Optional[Text],
     nlu_data: Optional[Text],
+    domain_path: Optional[Text],
     output_directory: Text = DEFAULT_RESULTS_PATH,
     additional_arguments: Optional[Dict] = None,
 ) -> None:
@@ -219,7 +220,11 @@ async def test_nlu(
             additional_arguments, run_evaluation, ["data_path", "model"]
         )
         await run_evaluation(
-            nlu_data, nlu_model, output_directory=output_directory, **kwargs
+            nlu_data,
+            domain_path,
+            nlu_model,
+            output_directory=output_directory,
+            **kwargs,
         )
     else:
         rasa.shared.utils.cli.print_error(
