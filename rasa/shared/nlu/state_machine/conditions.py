@@ -54,26 +54,24 @@ class SlotEqualsCondition(Condition):
 
 class ConditionWithConditions(abc.ABC):
     @abc.abstractproperty
-    def conditions() -> List[Condition]:
+    def conditions(self) -> List[Condition]:
         pass
 
     @property
-    def intents() -> List[Intent]:
+    def intents(self) -> List[Intent]:
         all_intents: List[Intent] = []
-        for condition in conditions:
-            if isinstance(condition, OrCondition):
-                all_intents += condition.intents
-            elif isinstance(condition, AndCondition):
+        for condition in self.conditions:
+            if isinstance(condition, ConditionWithConditions):
                 all_intents += condition.intents
             elif isinstance(condition, IntentCondition):
-                all_intents += condition.intent
+                all_intents.append(condition.intent)
 
         return all_intents
 
 
 class AndCondition(Condition, ConditionWithConditions):
     @property
-    def conditions() -> List[Condition]:
+    def conditions(self) -> List[Condition]:
         return self._conditions
 
     def __init__(self, conditions: List[Condition]):
@@ -85,7 +83,7 @@ class AndCondition(Condition, ConditionWithConditions):
 
 class OrCondition(Condition, ConditionWithConditions):
     @property
-    def conditions() -> List[Condition]:
+    def conditions(self) -> List[Condition]:
         return self._conditions
 
     def __init__(self, conditions: List[Condition]):
