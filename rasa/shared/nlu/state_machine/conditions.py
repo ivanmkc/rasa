@@ -1,10 +1,15 @@
-from typing import Any, List
+from typing import Any, List, Optional
 
 # from rasa.shared.core.trackers import "DialogueStateTracker"
 import abc
-from rasa.shared.nlu.state_machine.state_machine_models import Intent, Slot
+from typing import Union
+from rasa.shared.nlu.state_machine.state_machine_models import (
+    Action,
+    Intent,
+    Slot,
+)
 from rasa.shared.nlu.state_machine.condition import Condition
-from rasa.shared.core.events import StateMachineLifecycle
+from rasa.shared.core.events import ActionExecuted, StateMachineLifecycle
 
 
 class OnEntryCondition(Condition):
@@ -25,6 +30,24 @@ class IntentCondition(Condition):
         return self.intent.name == last_intent_name
 
 
+class ActionCondition(Condition):
+    action: Action
+
+    ignores_previous_tracker = True
+
+    def __init__(self, action: Action):
+        self.action = action
+
+    def is_valid(self, tracker: "DialogueStateTracker"):
+        last_action_name: Optional[str] = None
+        for event in reversed(tracker.events):
+            if isinstance(event, ActionExecuted):
+                last_action_name = event.action_name
+                break
+
+        return self.action.name == last_action_name
+
+
 class SlotsFilledCondition(Condition):
     slots: List[Slot]
 
@@ -36,15 +59,17 @@ class SlotsFilledCondition(Condition):
 
 
 class SlotEqualsCondition(Condition):
-    slot: Slot
+    slot: Union[Slot, str]
     value: Any
 
-    def __init__(self, slot: Slot, value: Any):
+    def __init__(self, slot: Union[Slot, str], value: Any):
         self.slot = slot
         self.value = value
 
     def is_valid(self, tracker: "DialogueStateTracker"):
-        tracker_slot = tracker.slots.get(self.slot.name)
+        slot_name = self.slot.name if isinstance(self.slot, Slot) else self.slot
+
+        tracker_slot = tracker.slots.get(slot_name)
 
         if tracker_slot:
             return tracker_slot.value == self.value

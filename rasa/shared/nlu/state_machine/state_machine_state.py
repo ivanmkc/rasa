@@ -1,12 +1,14 @@
 from typing import List, Optional, Set
 from rasa.shared.nlu.state_machine.state_machine_models import (
     Action,
+    ActionName,
     Intent,
     Slot,
     Utterance,
 )
 from rasa.shared.nlu.state_machine.condition import Condition
 from rasa.shared.nlu.state_machine.conditions import (
+    ActionCondition,
     ConditionWithConditions,
     IntentCondition,
     OrCondition,
@@ -69,7 +71,9 @@ class StateMachineState:
         self.responses = responses
 
     def get_slots_from_condition(self, condition: Condition) -> List[Slot]:
-        if isinstance(condition, SlotEqualsCondition):
+        if isinstance(condition, SlotEqualsCondition) and isinstance(
+            condition.slot, Slot
+        ):
             return [condition.slot]
         elif isinstance(condition, SlotsFilledCondition):
             return condition.slots
@@ -130,6 +134,10 @@ class StateMachineState:
 
         for prompt_actions in [slot.prompt_actions for slot in self.slots]:
             actions.update(prompt_actions)
+
+        for condition in self.all_conditions():
+            if isinstance(condition, ActionCondition):
+                actions.add(condition.action)
 
         for response_actions in [response.actions for response in self.responses]:
             actions.update(response_actions)

@@ -141,10 +141,10 @@ class Slot(abc.ABC):
         intents: Dict[Intent, Any] = {},
         prompt_actions: List[Action] = [],
     ):
-        if len(entities) == 0 and len(intents) == 0:
-            raise ValueError(
-                "At least one entity or intent must be provided or the slot will never be filled."
-            )
+        # if len(entities) == 0 and len(intents) == 0:
+        #     raise ValueError(
+        #         "At least one entity or intent must be provided or the slot will never be filled."
+        #     )
 
         if len(prompt_actions) == 0:
             raise ValueError("At least one prompt action is required.")
