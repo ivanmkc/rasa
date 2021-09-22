@@ -939,16 +939,7 @@ class DIETClassifier(IntentClassifier, EntityExtractor):
                 "confidence": message_sim[0],
             }
 
-            if (
-                self.component_config[RANKING_LENGTH]
-                and 0 < self.component_config[RANKING_LENGTH] < LABEL_RANKING_LENGTH
-            ):
-                output_length = self.component_config[RANKING_LENGTH]
-            else:
-                output_length = LABEL_RANKING_LENGTH
-
             ranking = list(zip(list(label_ids), message_sim))
-            ranking = ranking[:output_length]
             label_ranking = [
                 {
                     "id": hash(self.index_label_id_mapping[label_idx]),
@@ -1703,7 +1694,8 @@ class DIET(TransformerRasaModel):
             tf_batch_data, TEXT
         )
         sentence_feature_lengths = self._get_sentence_feature_lengths(
-            tf_batch_data, TEXT,
+            tf_batch_data,
+            TEXT,
         )
 
         text_transformed, _, _, _, _, attention_weights = self._tf_layers[
